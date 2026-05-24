@@ -1,0 +1,109 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { useLenis } from "lenis/react";
+import { motion } from "framer-motion";
+import Container from "./ui/Container";
+import Logo from "./ui/Logo";
+import { nav } from "@/lib/content";
+
+export default function Header() {
+  const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  useLenis(({ scroll }) => setScrolled(scroll > 24));
+
+  return (
+    <header
+      className={`fixed inset-x-0 top-0 z-50 border-b border-line bg-white transition-shadow duration-500 ${
+        scrolled ? "shadow-[0_6px_28px_-14px_rgba(0,0,0,0.22)]" : ""
+      }`}
+    >
+      <Container>
+        <div className="flex h-20 items-center justify-between">
+          <Link href="/" aria-label="АЗИМЕР — на главную" className="inline-flex">
+            <Logo tone="dark" className="h-14 w-auto" />
+          </Link>
+
+          {/* Desktop nav */}
+          <nav className="hidden items-center gap-9 lg:flex">
+            {nav.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="group relative text-sm font-medium text-graphite-900/70 transition-colors hover:text-graphite-900"
+              >
+                {item.label}
+                <span className="absolute -bottom-1.5 left-0 h-px w-0 bg-orange transition-all duration-300 group-hover:w-full" />
+              </Link>
+            ))}
+          </nav>
+
+          <div className="flex items-center gap-3">
+            <Link
+              href="/estimate"
+              className="hidden rounded-full bg-orange px-6 py-3 text-sm font-semibold text-white transition-all duration-300 hover:bg-orange-bright hover:-translate-y-0.5 sm:inline-flex"
+            >
+              Получить расчёт
+            </Link>
+
+            {/* Burger */}
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label="Меню"
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-graphite-900/15 lg:hidden"
+            >
+              <div className="flex flex-col gap-[5px]">
+                <span
+                  className={`block h-[1.6px] w-5 bg-graphite-900 transition-all duration-300 ${
+                    menuOpen ? "translate-y-[6.6px] rotate-45" : ""
+                  }`}
+                />
+                <span
+                  className={`block h-[1.6px] w-5 bg-graphite-900 transition-all duration-300 ${
+                    menuOpen ? "opacity-0" : ""
+                  }`}
+                />
+                <span
+                  className={`block h-[1.6px] w-5 bg-graphite-900 transition-all duration-300 ${
+                    menuOpen ? "-translate-y-[6.6px] -rotate-45" : ""
+                  }`}
+                />
+              </div>
+            </button>
+          </div>
+        </div>
+      </Container>
+
+      {/* Mobile menu */}
+      {menuOpen && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+          className="overflow-hidden border-t border-line bg-white lg:hidden"
+        >
+          <Container className="flex flex-col gap-1 py-5">
+            {nav.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMenuOpen(false)}
+                className="py-3 text-base font-medium text-graphite-900/80"
+              >
+                {item.label}
+              </Link>
+            ))}
+            <Link
+              href="/estimate"
+              onClick={() => setMenuOpen(false)}
+              className="mt-3 rounded-full bg-orange px-6 py-3.5 text-center text-sm font-semibold text-white"
+            >
+              Получить расчёт
+            </Link>
+          </Container>
+        </motion.div>
+      )}
+    </header>
+  );
+}

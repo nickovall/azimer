@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1100" fill="none">
+  <g stroke="#D0D1CE" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+
+    <!-- ── Roof truss, top-right ── -->
+    <path d="M980 268 H1540" />
+    <path d="M980 268 L1260 112 L1540 268" />
+    <path d="M1073 268 V216 M1167 268 V164 M1260 268 V112 M1353 268 V164 M1447 268 V216" />
+    <path d="M980 268 L1167 164 M1073 216 L1260 112 M1260 112 L1447 216 M1353 164 L1540 268" />
+    <!-- dimension line under truss -->
+    <path d="M980 320 H1540" stroke="#C5C7C3" />
+    <path d="M980 312 V328 M1540 312 V328" stroke="#C5C7C3" />
+    <path d="M974 268 V332 M1546 268 V332" stroke-width="1" stroke-dasharray="3 4" />
+    <!-- angle arc -->
+    <path d="M1030 268 A50 50 0 0 0 1015 232" stroke="#C5C7C3" />
+
+    <!-- ── Portal frames, bottom-left ── -->
+    <path d="M110 1010 V792 H452 V1010" />
+    <path d="M148 1010 V828 H414 V1010" />
+    <path d="M186 1010 V862 H376 V1010" />
+    <path d="M70 1010 H496" stroke="#C5C7C3" />
+    <path d="M281 1010 V792" stroke-width="1" stroke-dasharray="3 5" />
+    <!-- dimension -->
+    <path d="M110 1052 H452" stroke="#C5C7C3" />
+    <path d="M110 1044 V1060 M452 1044 V1060 M281 1044 V1060" stroke="#C5C7C3" />
+
+    <!-- ── Dimension cluster, bottom-right ── -->
+    <path d="M1090 968 H1500" stroke="#C5C7C3" />
+    <path d="M1090 960 L1098 976 M1500 960 L1508 976" stroke="#C5C7C3" />
+    <path d="M1090 930 V1000 M1500 930 V1000" stroke-width="1" stroke-dasharray="3 5" />
+    <path d="M1300 924 V1000" stroke-width="1" stroke-dasharray="3 5" />
+    <path d="M1540 880 V1010" stroke="#C5C7C3" />
+    <path d="M1532 880 L1548 888 M1532 1010 L1548 1002" stroke="#C5C7C3" />
+    <!-- angle mark -->
+    <path d="M1120 1060 H1260 M1120 1060 L1232 1006" />
+    <path d="M1170 1060 A50 50 0 0 0 1158 1039" stroke="#C5C7C3" />
+
+    <!-- ── Compass / radius mark, top-left ── -->
+    <path d="M120 150 A150 150 0 0 1 270 300" stroke-width="1.2" />
+    <path d="M120 300 H80 M120 300 V340 M104 284 L136 316 M136 284 L104 316" stroke="#C5C7C3" />
+    <path d="M120 300 L270 230" stroke-width="1" stroke-dasharray="4 5" />
+
+    <!-- ── Beam detail, mid ── -->
+    <path d="M640 560 H940 V604 H640 Z" stroke-width="1.2" />
+    <path d="M640 560 L660 540 H960 L940 560 M940 604 L960 584 V540" stroke-width="1" />
+    <path d="M660 582 H960" stroke-width="1" stroke-dasharray="3 5" />
+
+    <!-- scattered coordinate crosshairs -->
+    <g stroke="#C9CBC7" stroke-width="1.1">
+      <path d="M520 200 H544 M532 188 V212" />
+      <path d="M1490 560 H1514 M1502 548 V572" />
+      <path d="M380 470 H404 M392 458 V482" />
+      <path d="M860 900 H884 M872 888 V912" />
+    </g>
+  </g>
+
+  <g fill="#C3C5C1" font-family="'Courier New', monospace" font-size="22" letter-spacing="1">
+    <text x="1230" y="306">18 000</text>
+    <text x="1040" y="252">30°</text>
+    <text x="252" y="1086">12 000</text>
+    <text x="1270" y="952">1:30</text>
+    <text x="1186" y="1046">30°</text>
+    <text x="300" y="270">R 150</text>
+    <text x="760" y="528">А — А</text>
+  </g>
+</svg>

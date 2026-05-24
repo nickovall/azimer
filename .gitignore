@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# opennext build artifacts
+.open-next/
+
+# supabase scratch
+/supabase/.temp/

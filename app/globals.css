@@ -1,26 +1,97 @@
 @import "tailwindcss";
 
+@theme {
+  --color-graphite-950: #111111;
+  --color-graphite-900: #1d1c1c;
+  --color-graphite-800: #242322;
+  --color-graphite-700: #34322f;
+  --color-orange: #ed6629;
+  --color-orange-bright: #f26729;
+  --color-light: #f6f7f6;
+  --color-line: #d9d9d6;
+
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #f6f7f6;
+  --fg: #1d1c1c;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+::selection {
+  background: var(--color-orange);
+  color: #fff;
+}
+
+/* ── Lenis smooth scroll ───────────────────────────── */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-stopped {
+  overflow: clip;
+}
+
+/* ── Technical blueprint grid ──────────────────────── */
+.blueprint-grid {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+.blueprint-grid-dark {
+  background-image:
+    linear-gradient(to right, rgba(29, 28, 28, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(29, 28, 28, 0.05) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+/* ── Logo outline — крепит белый логотип на фото-фоне ── */
+.logo-outline {
+  filter:
+    drop-shadow(1px 0 0 #16110d) drop-shadow(-1px 0 0 #16110d)
+    drop-shadow(0 1px 0 #16110d) drop-shadow(0 -1px 0 #16110d)
+    drop-shadow(0.8px 0.8px 0 #16110d) drop-shadow(-0.8px -0.8px 0 #16110d)
+    drop-shadow(0.8px -0.8px 0 #16110d) drop-shadow(-0.8px 0.8px 0 #16110d);
+}
+
+/* ── Blueprint paper — светлый фон с чертёжной фактурой ── */
+.blueprint-paper {
+  background-color: #f6f7f6;
+  background-image:
+    url(/blueprint.svg),
+    linear-gradient(to right, rgba(29, 28, 28, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(29, 28, 28, 0.045) 1px, transparent 1px);
+  background-size: cover, 56px 56px, 56px 56px;
+  background-position: center, center, center;
+  background-repeat: no-repeat, repeat, repeat;
+}
+
+/* ── Reduced motion ────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
