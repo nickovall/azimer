@@ -24,16 +24,19 @@ export const frameTypes: OptionCard[] = [
   { id: "modular", label: "Модульный", desc: "Блок-модули с готовым контуром", rate: 35000 },
 ];
 
+// Ставки сэндвич-панелей 150мм минвата — из прайса Азамата от 20.05.2026
+// (включает материал с наценкой 20% + расходники: саморезы, фасон, герметик).
+// Толщину 100мм и PIR проставлены пропорционально от минваты 150мм.
 export const claddingTypes: OptionCard[] = [
   { id: "none", label: "Без стен", desc: "Открытый навес", rate: 0 },
   { id: "proflist", label: "Профлист", desc: "Эконом, неотапливаемые здания", rate: 700 },
-  { id: "sandwich_minvata", label: "Сэндвич минвата", desc: "Утеплённые здания, стандарт", rate: 1800 },
-  { id: "sandwich_pir", label: "Сэндвич PIR", desc: "Премиум теплоизоляция", rate: 2100 },
+  { id: "sandwich_minvata", label: "Сэндвич минвата 150мм", desc: "Утеплённые здания, стандарт", rate: 3500 },
+  { id: "sandwich_pir", label: "Сэндвич PIR 150мм", desc: "Премиум теплоизоляция", rate: 4100 },
 ];
 
 export const roofingTypes: OptionCard[] = [
   { id: "proflist", label: "Профлист", desc: "Неотапливаемые здания, бюджет", rate: 900 },
-  { id: "sandwich", label: "Сэндвич-панель", desc: "Утеплённая кровля", rate: 2200 },
+  { id: "sandwich", label: "Сэндвич-панель 150мм", desc: "Утеплённая кровля минвата", rate: 3800 },
 ];
 
 export const foundationTypes: OptionCard[] = [

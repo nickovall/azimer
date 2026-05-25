@@ -17,12 +17,6 @@ export default function Testimonials() {
               Благодарности от заказчиков
             </h2>
           </Reveal>
-          <Reveal delay={0.1}>
-            <p className="max-w-sm text-sm leading-relaxed text-light/55">
-              Реальные письма от компаний, с которыми мы работали — модульное
-              строительство, монтаж инженерных систем, отделка объектов.
-            </p>
-          </Reveal>
         </div>
 
         <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
