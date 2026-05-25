@@ -1,0 +1,26 @@
+image: node:20-alpine
+
+stages:
+  - deploy
+
+pages:
+  stage: deploy
+  variables:
+    NEXT_PUBLIC_SUPABASE_URL: https://objgpsjyftdrhafapwvw.supabase.co
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9iamdwc2p5ZnRkcmhhZmFwd3Z3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1NzMyNTUsImV4cCI6MjA5NTE0OTI1NX0.G3SjDMrYLhRPw_WboewcBMvBunMx89TS9X_mAlkvdXw
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - node_modules/
+  script:
+    - npm ci --prefer-offline --no-audit
+    - npm run build
+  pages:
+    publish: out
+  artifacts:
+    paths:
+      - out
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
