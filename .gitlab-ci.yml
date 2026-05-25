@@ -17,10 +17,10 @@ pages:
   script:
     - npm ci --prefer-offline --no-audit
     - npm run build
-  pages:
-    publish: out
+    - rm -rf public
+    - mv out public
   artifacts:
     paths:
-      - out
+      - public
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
