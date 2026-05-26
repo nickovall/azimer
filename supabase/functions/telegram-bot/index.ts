@@ -174,7 +174,21 @@ async function handleCommand(msg: any) {
     return;
   }
 
-  const [cmd, ...args] = (msg.text as string).split(/\s+/);
+  let [cmd, ...args] = (msg.text as string).split(/\s+/);
+
+  // Алиасы для меню BotFather (без пробелов)
+  const aliases: Record<string, [string, string[]]> = {
+    "/leadsnew":        ["/leads", ["new"]],
+    "/leadscontacted":  ["/leads", ["contacted"]],
+    "/leadskpsent":     ["/leads", ["kp_sent"]],
+    "/leadswon":        ["/leads", ["won"]],
+    "/leadslost":       ["/leads", ["lost"]],
+  };
+  // Убираем @botname из команды (Telegram добавляет в групповых чатах)
+  cmd = cmd.split("@")[0];
+  if (aliases[cmd]) {
+    [cmd, args] = aliases[cmd];
+  }
 
   if (cmd === "/start" || cmd === "/help") {
     await sendMessage(chatId,
