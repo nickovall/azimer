@@ -489,6 +489,8 @@ async function handleCommand(msg: any) {
     "/leadstoday":      ["/leads", ["today"]],
     "/leadsweek":       ["/leads", ["week"]],
     "/leadsmonth":      ["/leads", ["month"]],
+    "/kpnew":           ["/kp_new", []],
+    "/eadskpsent":      ["/leads", ["kp_sent"]],
   };
   // Убираем @botname из команды (Telegram добавляет в групповых чатах)
   cmd = cmd.split("@")[0];
