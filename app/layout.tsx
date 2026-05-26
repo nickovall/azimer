@@ -83,7 +83,7 @@ export const metadata: Metadata = {
     },
   },
   verification: {
-    yandex: undefined, // добавь токен Яндекс.Вебмастера когда подтвердишь сайт
+    yandex: "093cee092a2542ad",
   },
   formatDetection: { telephone: true, address: false, email: true },
 };
