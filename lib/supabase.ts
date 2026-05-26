@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { readUtm } from "@/lib/utm";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
@@ -24,6 +25,14 @@ export interface LeadInsert {
   // deno-lint-ignore no-explicit-any
   estimate?: any;
   files?: string[];
+  // UTM и источник трафика
+  utm_source?:   string;
+  utm_medium?:   string;
+  utm_campaign?: string;
+  utm_content?:  string;
+  utm_term?:     string;
+  referrer?:     string;
+  landing_page?: string;
 }
 
 /**
@@ -39,7 +48,9 @@ export async function submitLead(data: LeadInsert): Promise<void> {
     console.warn("[supabase] not configured — skipping insert");
     return;
   }
-  const { error } = await supabase.from("leads").insert(data);
+  // Подмешиваем UTM-метки и landing page — захвачены при первом визите.
+  const enriched: LeadInsert = { ...readUtm(), ...data };
+  const { error } = await supabase.from("leads").insert(enriched);
   if (error) {
     console.error("[supabase] insert error:", error.message);
     throw error;
