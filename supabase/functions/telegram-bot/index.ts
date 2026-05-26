@@ -9,6 +9,13 @@
 //
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  STEPS, type StepKey, type Collected,
+  parsePhone, parseDimension, parseInt0, parseItems,
+  calcEstimate, formatSummary, LOGISTICS,
+} from "./wizard.ts";
+
+const SITE_URL = Deno.env.get("SITE_URL") ?? "https://azimer.ru";
 
 const BOT_TOKEN        = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
 const WEBHOOK_SECRET   = Deno.env.get("TELEGRAM_WEBHOOK_SECRET") ?? "";
@@ -139,7 +146,17 @@ async function handleCallback(cb: any) {
     await answerCallback(cb.id, "🚫 Доступ запрещён");
     return;
   }
-  const [, newStatus, leadId] = (cb.data as string).split(":");
+
+  const data = cb.data as string;
+
+  // Wizard callbacks (w:field:value)
+  if (data.startsWith("w:")) {
+    await handleWizardCallback(cb);
+    return;
+  }
+
+  // Status change callbacks (s:status:leadId)
+  const [, newStatus, leadId] = data.split(":");
   if (!newStatus || !leadId) {
     await answerCallback(cb.id, "Не могу разобрать кнопку");
     return;
@@ -213,6 +230,9 @@ async function handleCommand(msg: any) {
       `<code>/find +79991</code> — по номеру телефона\n\n` +
       `<b>📊 Аналитика:</b>\n` +
       `<code>/stats</code> — статистика за 30 дней (всего заявок, по статусам, по источникам)\n\n` +
+      `<b>🧮 Генерация КП:</b>\n` +
+      `<code>/kp_new</code> — собрать КП по новому объекту через 14 вопросов с кнопками\n` +
+      `<code>/cancel</code> — отменить активную сессию КП\n\n` +
       `<b>🎯 Как работать со статусами:</b>\n` +
       `Под каждой карточкой 4 кнопки — нажимай как только меняется этап:\n` +
       `🟡 <b>Взял в работу</b> — позвонил, начал общение\n` +
@@ -327,6 +347,21 @@ async function handleCommand(msg: any) {
     return;
   }
 
+  if (cmd === "/kp_new") {
+    await startWizard(chatId);
+    return;
+  }
+
+  if (cmd === "/cancel") {
+    const cancelled = await cancelWizard(chatId);
+    await sendMessage(chatId,
+      cancelled
+        ? "❌ Сессия КП отменена."
+        : "У тебя нет активной сессии. /kp_new — начать новую."
+    );
+    return;
+  }
+
   // /kp оставлен как скрытая команда — для поиска заявки по точному ID
   // (полезно когда обсуждаешь заявку в другом канале). В меню BotFather не выносим.
   if (cmd === "/kp") {
@@ -368,8 +403,18 @@ Deno.serve(async (req) => {
   try {
     if (update.callback_query) {
       await handleCallback(update.callback_query);
-    } else if (update.message?.text?.startsWith("/")) {
-      await handleCommand(update.message);
+    } else if (update.message?.text) {
+      const text = update.message.text as string;
+      // Если есть активная wizard-сессия и это НЕ команда — пускаем в wizard
+      if (!text.startsWith("/")) {
+        const chatId = update.message.chat.id;
+        const handled = isAllowed(chatId) ? await handleWizardText(chatId, text) : false;
+        if (!handled) {
+          // Свободное сообщение без активной сессии — игнорируем (пока)
+        }
+      } else {
+        await handleCommand(update.message);
+      }
     }
   } catch (e) {
     console.error("bot error:", e);
@@ -377,3 +422,333 @@ Deno.serve(async (req) => {
 
   return new Response("ok");
 });
+
+// ═══════════════════════════════════════════════════════════════
+// WIZARD — пошаговый сбор параметров КП и генерация заявки
+// ═══════════════════════════════════════════════════════════════
+
+async function getActiveSession(chatId: number) {
+  const { data } = await supabase
+    .from("kp_sessions")
+    .select("*")
+    .eq("chat_id", chatId)
+    .in("status", ["collecting", "confirming"])
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data as any | null;
+}
+
+async function startWizard(chatId: number) {
+  // Если есть активная — спросить
+  const existing = await getActiveSession(chatId);
+  if (existing) {
+    await sendMessage(chatId,
+      `У тебя уже есть незавершённая сессия (шаг: <code>${existing.current_step}</code>).\n` +
+      `Чтобы продолжить — просто ответь на последний вопрос.\n` +
+      `Чтобы отменить — <code>/cancel</code> и потом снова <code>/kp_new</code>.`
+    );
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from("kp_sessions")
+    .insert({ chat_id: chatId, current_step: "client_name", collected: {} })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    await sendMessage(chatId, `Ошибка создания сессии: ${error?.message ?? "?"}`);
+    return;
+  }
+
+  await sendMessage(chatId,
+    `<b>🧮 Новая сессия КП</b>\n\n` +
+    `Соберём 14 параметров с кнопками и короткими ответами. ` +
+    `Если ошибся — пиши <code>/cancel</code> и начинай заново.\n\n` +
+    `<i>Сессия живёт 24 часа.</i>`
+  );
+
+  await askStep(chatId, "client_name", data.id);
+}
+
+async function cancelWizard(chatId: number): Promise<boolean> {
+  const session = await getActiveSession(chatId);
+  if (!session) return false;
+  await supabase.from("kp_sessions").update({ status: "cancelled" }).eq("id", session.id);
+  return true;
+}
+
+async function askStep(chatId: number, stepKey: StepKey, sessionId: string) {
+  const step = STEPS[stepKey];
+  const replyMarkup = step.buttons ? { inline_keyboard: step.buttons.map(row => row.map(b => ({ text: b.text, callback_data: b.data }))) } : undefined;
+  const sent: any = await sendMessage(chatId, step.prompt, replyMarkup ? { reply_markup: replyMarkup } : {});
+  // Сохраняем message_id вопроса (для возможного редактирования)
+  if (sent?.result?.message_id) {
+    await supabase.from("kp_sessions")
+      .update({
+        current_step: stepKey,
+        last_question_message_id: sent.result.message_id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", sessionId);
+  }
+}
+
+async function saveAndAdvance(chatId: number, session: any, fieldKey: string, value: any, nextStep: StepKey) {
+  const collected = { ...(session.collected ?? {}), [fieldKey]: value };
+  if (nextStep === "confirm") {
+    await supabase.from("kp_sessions")
+      .update({ collected, current_step: "confirm", status: "confirming", updated_at: new Date().toISOString() })
+      .eq("id", session.id);
+    await showConfirmation(chatId, session.id, collected);
+    return;
+  }
+  await supabase.from("kp_sessions")
+    .update({ collected, current_step: nextStep, updated_at: new Date().toISOString() })
+    .eq("id", session.id);
+  await askStep(chatId, nextStep, session.id);
+}
+
+async function showConfirmation(chatId: number, sessionId: string, collected: Collected) {
+  const summary = formatSummary(collected);
+  const buttons = STEPS.confirm.buttons!.map(row => row.map(b => ({ text: b.text, callback_data: b.data })));
+  await sendMessage(chatId, summary + `\n<i>Подтверди — и создам заявку + ссылку на КП.</i>`, {
+    reply_markup: { inline_keyboard: buttons },
+  });
+}
+
+async function handleWizardText(chatId: number, text: string): Promise<boolean> {
+  const session = await getActiveSession(chatId);
+  if (!session) return false;
+
+  const stepKey = session.current_step as StepKey;
+  const step = STEPS[stepKey];
+  if (!step) return false;
+
+  const tNorm = text.trim();
+  const collected = session.collected as Collected;
+
+  // text / numeric / optional_text
+  switch (stepKey) {
+    case "client_name": {
+      if (tNorm.length < 2) {
+        await sendMessage(chatId, "Слишком короткое имя. Попробуй ещё раз.");
+        return true;
+      }
+      await saveAndAdvance(chatId, session, "client_name", tNorm, "phone");
+      return true;
+    }
+    case "phone": {
+      const p = parsePhone(tNorm);
+      if (!p) {
+        await sendMessage(chatId, "Не похоже на телефон. Пример: <code>+79991234567</code>");
+        return true;
+      }
+      await saveAndAdvance(chatId, session, "phone", p, "object_type");
+      return true;
+    }
+    case "length":
+    case "width":
+    case "height": {
+      const n = parseDimension(tNorm);
+      if (!n) {
+        await sendMessage(chatId, "Не понял число. Просто метраж, например: <code>18</code>");
+        return true;
+      }
+      const next = stepKey === "length" ? "width" : stepKey === "width" ? "height" : "frame";
+      await saveAndAdvance(chatId, session, stepKey, n, next);
+      return true;
+    }
+    case "gates":
+    case "windows": {
+      const items = parseItems(tNorm);
+      if (items === null) {
+        await sendMessage(chatId, "Не разобрал. Пример: <code>1x4x4</code> или <code>нет</code>");
+        return true;
+      }
+      const next = stepKey === "gates" ? "windows" : "doors";
+      await saveAndAdvance(chatId, session, stepKey, items, next);
+      return true;
+    }
+    case "doors": {
+      let count = 0;
+      const low = tNorm.toLowerCase();
+      if (low === "нет" || low === "не нужно" || low === "-") count = 0;
+      else {
+        const n = parseInt0(tNorm);
+        if (n === null) {
+          await sendMessage(chatId, "Сколько дверей? Пример: <code>2</code> или <code>нет</code>");
+          return true;
+        }
+        count = n;
+      }
+      await saveAndAdvance(chatId, session, "doors", { count }, "logistics_choice");
+      return true;
+    }
+    case "notes": {
+      const low = tNorm.toLowerCase();
+      const value = (low === "нет" || low === "-") ? undefined : tNorm;
+      await saveAndAdvance(chatId, session, "notes", value, "confirm");
+      return true;
+    }
+    case "object_type":
+    case "frame":
+    case "cladding":
+    case "roofing":
+    case "foundation":
+    case "logistics_choice":
+    case "logistics_dest":
+    case "confirm":
+      await sendMessage(chatId, "Здесь нужно нажать кнопку выше ↑");
+      return true;
+  }
+  return true;
+}
+
+async function handleWizardCallback(cb: any) {
+  const chatId = cb.message.chat.id;
+  const data = cb.data as string;
+  const [, field, value] = data.split(":");
+
+  const session = await getActiveSession(chatId);
+  if (!session) {
+    await answerCallback(cb.id, "Сессия истекла. /kp_new — начать новую.");
+    return;
+  }
+
+  // Подтверждение
+  if (field === "confirm") {
+    if (value === "cancel") {
+      await supabase.from("kp_sessions").update({ status: "cancelled" }).eq("id", session.id);
+      await answerCallback(cb.id, "Отменено");
+      await sendMessage(chatId, "❌ КП отменено. /kp_new — начать заново.");
+      return;
+    }
+    if (value === "edit") {
+      await answerCallback(cb.id, "Какой шаг править?");
+      // Простой вариант: предлагаем начать заново
+      await sendMessage(chatId,
+        "Чтобы исправить — отмени и начни заново: <code>/cancel</code> → <code>/kp_new</code>.\n" +
+        "<i>В следующей версии добавим точечную правку каждого шага.</i>"
+      );
+      return;
+    }
+    if (value === "yes") {
+      await answerCallback(cb.id, "Создаю КП...");
+      await finalizeKpAndCreateLead(chatId, session);
+      return;
+    }
+  }
+
+  // Логистика — особый случай
+  if (field === "logistics_choice") {
+    if (value === "yes") {
+      await answerCallback(cb.id, "Куда?");
+      await supabase.from("kp_sessions")
+        .update({ collected: { ...session.collected, logistics_add: true }, current_step: "logistics_dest", updated_at: new Date().toISOString() })
+        .eq("id", session.id);
+      await askStep(chatId, "logistics_dest", session.id);
+      return;
+    } else {
+      // Без доставки — сразу к notes
+      await saveAndAdvance(chatId, { ...session, collected: { ...session.collected, logistics_add: false } }, "logistics_add", false, "notes");
+      await answerCallback(cb.id, "Без доставки");
+      return;
+    }
+  }
+
+  if (field === "logistics_dest") {
+    const dest = LOGISTICS.find(l => l.id === value);
+    if (!dest) {
+      await answerCallback(cb.id, "Не понял направление");
+      return;
+    }
+    const collected = { ...session.collected, logistics_dest: value, logistics_amount: dest.amount };
+    await supabase.from("kp_sessions")
+      .update({ collected, current_step: "notes", updated_at: new Date().toISOString() })
+      .eq("id", session.id);
+    await answerCallback(cb.id, dest.label);
+    await askStep(chatId, "notes", session.id);
+    return;
+  }
+
+  // Обычные buttons-поля (object_type / frame / cladding / roofing / foundation)
+  const stepKey = session.current_step as StepKey;
+  const step = STEPS[stepKey];
+  if (!step || step.type !== "buttons") {
+    await answerCallback(cb.id, "Не тот шаг");
+    return;
+  }
+
+  await answerCallback(cb.id, value);
+  await saveAndAdvance(chatId, session, field, value, step.next);
+}
+
+async function finalizeKpAndCreateLead(chatId: number, session: any) {
+  const c = session.collected as Collected;
+  const estimate = calcEstimate(c);
+
+  // Собираем estimate-объект как с сайта
+  const estimateData = {
+    state: {
+      objectType: c.object_type,
+      frame: c.frame,
+      length: c.length,
+      width:  c.width,
+      height: c.height,
+      cladding:   c.cladding,
+      roofing:    c.roofing,
+      foundation: c.foundation,
+      options: {
+        gate:   c.gates?.reduce((a, g) => a + g.count, 0) ?? 0,
+        window: c.windows?.reduce((a, w) => a + w.count, 0) ?? 0,
+        door:   c.doors?.count ?? 0,
+      },
+    },
+    area:     (c.length ?? 0) * (c.width ?? 0),
+    wallArea: 2 * ((c.length ?? 0) + (c.width ?? 0)) * (c.height ?? 0),
+    lines:    estimate.lines,
+    base:     estimate.total,
+    low:      estimate.low,
+    high:     estimate.high,
+  };
+
+  const noteParts: string[] = [];
+  if (c.notes) noteParts.push(c.notes);
+  if (c.logistics_add && c.logistics_dest === "other") noteParts.push("Логистика: уточнить направление и стоимость");
+
+  const { data: lead, error } = await supabase
+    .from("leads")
+    .insert({
+      source:      "kp_bot",
+      status:      "kp_sent",
+      name:        c.client_name,
+      phone:       c.phone,
+      object_type: c.object_type,
+      message:     noteParts.join("\n") || null,
+      estimate:    estimateData,
+    })
+    .select("id")
+    .single();
+
+  if (error || !lead) {
+    await sendMessage(chatId, `❌ Ошибка создания заявки: ${error?.message ?? "?"}`);
+    return;
+  }
+
+  await supabase.from("kp_sessions")
+    .update({ status: "done", created_lead_id: lead.id, updated_at: new Date().toISOString() })
+    .eq("id", session.id);
+
+  const kpUrl = `${SITE_URL}/kp/${lead.id}`;
+
+  await sendMessage(chatId,
+    `✅ <b>КП готово!</b>\n\n` +
+    formatSummary(c) +
+    `\n\n📎 <b>Открыть и скачать PDF:</b>\n${kpUrl}\n\n` +
+    `Заявка в БД: <code>${lead.id}</code>\n` +
+    `Статус: 📄 КП отправлено (нажми ✅ Договор когда подпишете).`,
+    { disable_web_page_preview: false }
+  );
+}
