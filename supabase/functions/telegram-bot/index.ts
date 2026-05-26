@@ -183,6 +183,9 @@ async function handleCommand(msg: any) {
     "/leadskpsent":     ["/leads", ["kp_sent"]],
     "/leadswon":        ["/leads", ["won"]],
     "/leadslost":       ["/leads", ["lost"]],
+    "/leadstoday":      ["/leads", ["today"]],
+    "/leadsweek":       ["/leads", ["week"]],
+    "/leadsmonth":      ["/leads", ["month"]],
   };
   // Убираем @botname из команды (Telegram добавляет в групповых чатах)
   cmd = cmd.split("@")[0];
@@ -192,29 +195,61 @@ async function handleCommand(msg: any) {
 
   if (cmd === "/start" || cmd === "/help") {
     await sendMessage(chatId,
-      `<b>Бот АЗИМЕР</b>\n\n` +
-      `Команды:\n` +
-      `/leads — последние 10 заявок\n` +
-      `/leads new — только новые\n` +
-      `/leads contacted — в работе\n` +
-      `/stats — статистика за 30 дней\n` +
-      `/kp &lt;id&gt; — данные по заявке для КП\n` +
-      `/help — эта подсказка\n\n` +
-      `Кнопки под каждой заявкой меняют её статус.`
+      `<b>🤖 Бот АЗИМЕР — инструкция</b>\n\n` +
+      `Бот ловит заявки с сайта и помогает вести их по воронке.\n\n` +
+      `<b>📋 Списки заявок:</b>\n` +
+      `<code>/leads</code> — последние 10 заявок\n` +
+      `<code>/leadsnew</code> — только новые (не взятые в работу)\n` +
+      `<code>/leadscontacted</code> — в работе (взял, но КП ещё не отправил)\n` +
+      `<code>/leadskpsent</code> — КП отправлено, ждём решения клиента\n` +
+      `<code>/leadswon</code> — закрытые в плюс (договоры)\n` +
+      `<code>/leadslost</code> — отказы\n\n` +
+      `<b>📅 По датам:</b>\n` +
+      `<code>/leadstoday</code> — сегодня\n` +
+      `<code>/leadsweek</code> — последние 7 дней\n` +
+      `<code>/leadsmonth</code> — последние 30 дней\n\n` +
+      `<b>🔍 Поиск:</b>\n` +
+      `<code>/find Иванов</code> — по имени, телефону, компании, объекту\n` +
+      `<code>/find +79991</code> — по номеру телефона\n\n` +
+      `<b>📊 Аналитика:</b>\n` +
+      `<code>/stats</code> — статистика за 30 дней (всего заявок, по статусам, по источникам)\n\n` +
+      `<b>🎯 Как работать со статусами:</b>\n` +
+      `Под каждой карточкой 4 кнопки — нажимай как только меняется этап:\n` +
+      `🟡 <b>Взял в работу</b> — позвонил, начал общение\n` +
+      `📄 <b>Отправил КП</b> — клиент получил коммерческое\n` +
+      `✅ <b>Договор</b> — сделка состоялась\n` +
+      `❌ <b>Отказ</b> — клиент отказался / не отвечает\n\n` +
+      `<b>💡 Совет:</b> утром жми <code>/leadsnew</code>, вечером — <code>/stats</code>.\n` +
+      `Каждой новой заявке сразу жми 🟡 чтоб не забыть позвонить.`
     );
     return;
   }
 
   if (cmd === "/leads") {
-    const filterStatus = args[0];
+    const filter = args[0];
     let q = supabase
       .from("leads")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(10);
-    if (filterStatus && STATUS_LABEL[filterStatus]) {
-      q = q.eq("status", filterStatus);
+
+    // Фильтры по статусу
+    if (filter && STATUS_LABEL[filter]) {
+      q = q.eq("status", filter);
     }
+    // Фильтры по дате
+    else if (filter === "today") {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      q = q.gte("created_at", today.toISOString()).limit(50);
+    } else if (filter === "week") {
+      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      q = q.gte("created_at", since).limit(50);
+    } else if (filter === "month") {
+      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      q = q.gte("created_at", since).limit(50);
+    }
+
     const { data, error } = await q;
     if (error) {
       await sendMessage(chatId, `Ошибка: ${error.message}`);
@@ -224,6 +259,37 @@ async function handleCommand(msg: any) {
       await sendMessage(chatId, "Заявок не найдено.");
       return;
     }
+    if (data.length > 10) {
+      await sendMessage(chatId, `<b>Найдено ${data.length} заявок</b> — показываю по очереди.`);
+    }
+    for (const lead of data) {
+      await sendMessage(chatId, formatLeadCard(lead), { reply_markup: leadButtons(lead.id) });
+    }
+    return;
+  }
+
+  if (cmd === "/find") {
+    const query = args.join(" ").trim();
+    if (!query) {
+      await sendMessage(chatId, "Использование: <code>/find Иванов</code> или <code>/find +7999</code>");
+      return;
+    }
+    const q = `%${query.replace(/[%_]/g, "\\$&")}%`;
+    const { data, error } = await supabase
+      .from("leads")
+      .select("*")
+      .or(`name.ilike.${q},phone.ilike.${q},company.ilike.${q},object_type.ilike.${q},email.ilike.${q}`)
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (error) {
+      await sendMessage(chatId, `Ошибка поиска: ${error.message}`);
+      return;
+    }
+    if (!data || data.length === 0) {
+      await sendMessage(chatId, `По запросу <b>${query}</b> ничего не найдено.`);
+      return;
+    }
+    await sendMessage(chatId, `<b>Найдено ${data.length} заявок</b> по запросу <i>${query}</i>:`);
     for (const lead of data) {
       await sendMessage(chatId, formatLeadCard(lead), { reply_markup: leadButtons(lead.id) });
     }
@@ -261,10 +327,15 @@ async function handleCommand(msg: any) {
     return;
   }
 
+  // /kp оставлен как скрытая команда — для поиска заявки по точному ID
+  // (полезно когда обсуждаешь заявку в другом канале). В меню BotFather не выносим.
   if (cmd === "/kp") {
     const leadId = args[0];
     if (!leadId) {
-      await sendMessage(chatId, "Использование: <code>/kp &lt;id заявки&gt;</code>\nID видно под каждой карточкой.");
+      await sendMessage(chatId,
+        "Использование: <code>/kp &lt;id заявки&gt;</code>\n" +
+        "ID видно под каждой карточкой. Проще искать через <code>/find</code> или <code>/leads</code>."
+      );
       return;
     }
     const { data, error } = await supabase.from("leads").select("*").eq("id", leadId).single();
@@ -276,7 +347,7 @@ async function handleCommand(msg: any) {
     return;
   }
 
-  await sendMessage(chatId, `Команда <code>${cmd}</code> неизвестна. /help — список.`);
+  await sendMessage(chatId, `Команда <code>${cmd}</code> неизвестна. /help — полная инструкция.`);
 }
 
 // ─────────────────────────── entry ───────────────────────────
