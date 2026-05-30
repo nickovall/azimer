@@ -30,12 +30,25 @@ export function calculate(input: BuildingInput): Estimate {
     ...calculateLogistics(input),
   ];
 
-  // 3.1. Для холодных объектов — снижаем работы и НР (меньше детализации, простой монтаж)
+  // 3.1. Для холодных объектов — снижаем работы и накладные
   const insulation = detectInsulation(input);
-  const coldDiscountWorks = insulation === "cold" ? 0.70 : 1.0;
+  const isCold = insulation === "cold";
 
-  // 4. Итоги
-  const totals = computeTotals(lines, { worksMultiplier: coldDiscountWorks });
+  // 3.2. Скидка от объёма (рыночный паттерн: МС-Ангар, АМС-МК, СтройСибМонтаж)
+  const A = geo.floorArea;
+  const volumeMultiplier =
+    A >= 1500 ? 0.80 :   // -20%
+    A >= 800  ? 0.85 :   // -15%
+    A >= 500  ? 0.90 :   // -10%
+                1.0;
+
+  // 4. Итоги — холодный ангар: меньше работ (×0.70), меньше НР+СП, меньше наценка клиенту
+  const totals = computeTotals(lines, {
+    worksMultiplier:  isCold ? 0.70 : 1.0,
+    finalMultiplier:  volumeMultiplier,
+    overheadMultiplier: isCold ? 0.50 : 1.0,  // для холодного — упрощённая смета
+    markupOverride:     isCold ? 0.10 : undefined,  // 10% наценка вместо 20%
+  });
 
   return {
     input,
@@ -57,13 +70,19 @@ export function calculate(input: BuildingInput): Estimate {
 
 function computeTotals(
   lines: LineItem[],
-  opts: { worksMultiplier?: number } = {},
+  opts: {
+    worksMultiplier?:    number;
+    finalMultiplier?:    number;
+    overheadMultiplier?: number;
+    markupOverride?:     number;
+  } = {},
 ): EstimateTotals {
   const sumByCategory = (cat: string) =>
     lines.filter(l => l.category === cat).reduce((s, l) => s + l.total, 0);
 
-  const materials = sumByCategory("material");
-  const works     = sumByCategory("work") * (opts.worksMultiplier ?? 1);
+  const finalMul  = opts.finalMultiplier ?? 1;
+  const materials = sumByCategory("material") * finalMul;
+  const works     = sumByCategory("work") * (opts.worksMultiplier ?? 1) * finalMul;
   const logistics = sumByCategory("logistics");
   const direct    = materials + works + logistics;
 
@@ -71,8 +90,9 @@ function computeTotals(
   const fot = works * FINANCE.fot_share_of_works;
 
   // Накладные и сметная прибыль (МДС 81-33 / МДС 81-25)
-  const overhead = fot * FINANCE.overhead_pct_of_FOT;
-  const profit   = fot * FINANCE.profit_pct_of_FOT;
+  const ovhMul = opts.overheadMultiplier ?? 1;
+  const overhead = fot * FINANCE.overhead_pct_of_FOT * ovhMul;
+  const profit   = fot * FINANCE.profit_pct_of_FOT   * ovhMul;
 
   // Запас компании
   const beforeMarginBase = direct + overhead + profit;
@@ -80,8 +100,9 @@ function computeTotals(
 
   const beforeMarkup = beforeMarginBase + margin;
 
-  // Наценка клиенту 20%
-  const markup = beforeMarkup * FINANCE.client_markup_pct;
+  // Наценка клиенту (по умолчанию 20%, для холодного — 10%)
+  const markupPct = opts.markupOverride ?? FINANCE.client_markup_pct;
+  const markup = beforeMarkup * markupPct;
   const final = beforeMarkup + markup;
 
   const low  = Math.round((final * 0.90) / 1000) * 1000;

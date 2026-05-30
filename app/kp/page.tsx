@@ -177,6 +177,37 @@ export default function KpPage() {
           </div>
         </div>
 
+        {/* ─────────── Что входит / не входит ─────────── */}
+        <div className="mt-8 grid gap-4 md:grid-cols-2">
+          {/* Включено */}
+          <div className="rounded-2xl border border-green-700/20 bg-green-50/50 p-6">
+            <p className="font-semibold text-green-800">✅ Включено в стоимость</p>
+            <ul className="mt-3 space-y-1.5 text-sm text-graphite-900/80">
+              {included(estimate.input).map((s, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="text-green-600">•</span>
+                  <span>{s}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          {/* Не включено */}
+          <div className="rounded-2xl border border-red-700/20 bg-red-50/30 p-6">
+            <p className="font-semibold text-red-800">❌ Не входит в стоимость</p>
+            <ul className="mt-3 space-y-1.5 text-sm text-graphite-900/80">
+              {excluded(estimate.input).map((s, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="text-red-600">•</span>
+                  <span>{s}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-3 text-xs text-graphite-900/50">
+              Эти позиции можем добавить в КП отдельно — обсудим с менеджером.
+            </p>
+          </div>
+        </div>
+
         {/* ─────────── Дисклеймер ─────────── */}
         <div className="mt-6 rounded-2xl border-l-4 border-orange bg-orange/5 p-5 text-sm leading-relaxed text-graphite-900/70">
           <p className="font-semibold text-graphite-900">⚠️ Важно:</p>
@@ -257,3 +288,61 @@ const foundationLabel = (f: string) => ({
   none: "Без фундамента", pile_screw: "Свайно-винтовой", pile_grillage: "Свайно-ростверковый",
   strip: "Ленточный", slab_200: "Плита 200мм", slab_300: "Плита 300мм",
 }[f] ?? f);
+
+// ─────────── Что входит / не входит ───────────
+
+function included(input: BuildingInput): string[] {
+  const list: string[] = [
+    "Проектирование (типовая КМ-документация)",
+    "Изготовление металлоконструкций каркаса",
+    "Антикоррозийная обработка / покраска",
+    "Доставка материалов в Красноярск",
+    "Монтаж каркаса на готовый фундамент",
+    "Гарантия на конструкцию — 7 лет",
+  ];
+  if (input.foundation !== "none") {
+    list.push(`Фундамент: ${foundationLabel(input.foundation)}`);
+  }
+  if (input.cladding !== "none") {
+    list.push(`Облицовка стен: ${claddingLabel(input.cladding)}${input.claddingThk ? ` ${input.claddingThk}мм` : ""}`);
+  }
+  if (input.roofing) {
+    list.push(`Кровля: ${roofingLabel(input.roofing)}${input.roofingThk ? ` ${input.roofingThk}мм` : ""}`);
+  }
+  const gateCount = (input.gates ?? []).reduce((s, g) => s + g.count, 0);
+  if (gateCount > 0) list.push(`Ворота секционные с автоматикой — ${gateCount} шт`);
+  const winCount = (input.windows ?? []).reduce((s, w) => s + w.count, 0);
+  if (winCount > 0) list.push(`Окна ПВХ — ${winCount} шт`);
+  const doorCount = input.doors?.count ?? 0;
+  if (doorCount > 0) list.push(`Двери — ${doorCount} шт`);
+  if (input.logisticsAdd) {
+    list.push(`Доставка в направлении: ${input.logisticsDest === "other" ? "по согласованию" : input.logisticsDest}`);
+  }
+  return list;
+}
+
+function excluded(input: BuildingInput): string[] {
+  const list: string[] = [];
+  if (input.foundation === "none") {
+    list.push("Фундамент (требует отдельного расчёта по геологии)");
+  }
+  // Внутренние работы
+  list.push("Электрика, освещение, силовая разводка");
+  list.push("Отопление и вентиляция");
+  list.push("Внутренняя отделка стен и потолка");
+  list.push("Бетонные полы / промышленный наливной пол");
+  list.push("Сантехника, водоснабжение, канализация");
+  list.push("Слаботочные системы (видеонаблюдение, охрана)");
+  list.push("Подключение к внешним сетям");
+
+  // Гео
+  if (!input.logisticsAdd) {
+    list.push("Доставка за пределы Красноярска");
+  }
+  // Документы
+  list.push("Экспертиза проекта, разрешения, ИРД");
+  list.push("Кран-балки, мостовые краны");
+  list.push("Антресоли, второй этаж, мезонин");
+
+  return list;
+}
