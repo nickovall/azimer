@@ -95,3 +95,23 @@ html.lenis body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── Print стили для страницы КП ─────────────────────── */
+@media print {
+  /* Скрываем header, footer, превью-навигацию */
+  header, footer, .print\:hidden { display: none !important; }
+
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  @page {
+    size: A4;
+    margin: 12mm 14mm;
+  }
+
+  /* Переносы между большими секциями */
+  table { page-break-inside: auto; }
+  tr    { page-break-inside: avoid; page-break-after: auto; }
+}

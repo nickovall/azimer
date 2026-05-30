@@ -5,6 +5,7 @@ import type { Geometry } from "../geometry";
 import { round, ceil } from "../geometry";
 import { FOUNDATION, WORKS } from "../catalog";
 import { FOUNDATION_NORMS } from "../consumption";
+import { detectInsulation } from "./frame";
 
 export function calculateFoundation(input: BuildingInput, geo: Geometry): LineItem[] {
   switch (input.foundation) {
@@ -27,19 +28,23 @@ export function calculateFoundation(input: BuildingInput, geo: Geometry): LineIt
 function screwPile(input: BuildingInput, geo: Geometry): LineItem[] {
   const lines: LineItem[] = [];
 
-  // Подбор плотности свай по типу нагрузки
-  const isLoaded = (input.craneCapacityT ?? 0) > 0 || input.frame === "metal";
+  // Подбор плотности свай по типу нагрузки и комплектации
+  const isCold     = detectInsulation(input) === "cold";
   const isSwelling = input.soilType === "swelling" || input.soilType === "clay";
+  const isHeavyLoad = (input.craneCapacityT ?? 0) > 0 || (input.frame === "metal" && !isCold);
 
-  const density = isSwelling
-    ? FOUNDATION_NORMS.screw_pile_density_per_m2.swelling
-    : isLoaded
-      ? FOUNDATION_NORMS.screw_pile_density_per_m2.loaded
-      : FOUNDATION_NORMS.screw_pile_density_per_m2.standard;
+  // Для холодных — самые лёгкие сваи и редкий шаг
+  const density = isCold
+    ? 0.30   // ~1 свая на 3.3 м² для холодного ангара
+    : isSwelling
+      ? FOUNDATION_NORMS.screw_pile_density_per_m2.swelling
+      : isHeavyLoad
+        ? FOUNDATION_NORMS.screw_pile_density_per_m2.loaded
+        : FOUNDATION_NORMS.screw_pile_density_per_m2.standard;
 
   const piles = ceil(geo.floorArea * density);
-  const pileUnit = isLoaded ? FOUNDATION.screw_pile_133_3000 : FOUNDATION.screw_pile_108_2500;
-  const pileName = isLoaded ? "Свая винтовая Ø133, L=3000 мм" : "Свая винтовая Ø108, L=2500 мм";
+  const pileUnit = isHeavyLoad ? FOUNDATION.screw_pile_133_3000 : FOUNDATION.screw_pile_108_2500;
+  const pileName = isHeavyLoad ? "Свая винтовая Ø133, L=3000 мм" : "Свая винтовая Ø108, L=2500 мм";
 
   lines.push({
     category: "material", group: "foundation",

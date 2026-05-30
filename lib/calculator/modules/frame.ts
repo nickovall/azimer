@@ -35,6 +35,17 @@ function pickBaseKgM2(input: BuildingInput, geo: Geometry, table: Record<string,
   return table[`span_${keys[0]}`];
 }
 
+// Определение типа комплектации:
+// - "cold"   — холодный (профлист стены+кровля, без утепления, без отопления)
+// - "warm"   — тёплый (сэндвич стены или кровля, готовая коробка)
+// - "turnkey" — под ключ (тёплый + отделка + инженерка)
+export function detectInsulation(input: BuildingInput): "cold" | "warm" | "turnkey" {
+  const isWallCold = input.cladding === "none" || input.cladding === "proflist";
+  const isRoofCold = input.roofing === "proflist";
+  if (isWallCold && isRoofCold) return "cold";
+  return "warm"; // turnkey пока определяется опциями
+}
+
 function computeSteelMassKg(input: BuildingInput, geo: Geometry, type: "lstk" | "metal"): number {
   const table = type === "lstk" ? FRAME_NORMS.lstk_base_kg_per_m2 : FRAME_NORMS.metal_base_kg_per_m2;
   let kgPerM2 = pickBaseKgM2(input, geo, table);
@@ -58,6 +69,12 @@ function computeSteelMassKg(input: BuildingInput, geo: Geometry, type: "lstk" | 
   // Многопролётность экономит метал на ~10%
   if ((input.spanCount ?? 1) > 1) {
     kgPerM2 *= 0.90;
+  }
+
+  // Холодный ангар — используются лёгкие конструкции (гнутый профиль / прямостен лёгкий)
+  // Расход металла на 40-50% ниже чем у тёплого
+  if (detectInsulation(input) === "cold") {
+    kgPerM2 *= 0.55;
   }
 
   // Надбавки на швы и КМД

@@ -1029,14 +1029,71 @@ async function finalizeKpAndCreateLead(chatId: number, session: any) {
     .update({ status: "done", created_lead_id: lead.id, updated_at: new Date().toISOString() })
     .eq("id", session.id);
 
-  const kpUrl = `${SITE_URL}/kp/${lead.id}`;
+  // Строим ссылку на детальный КП на сайте — все параметры в URL hash
+  const kpUrl = buildKpUrl(c, lead.id);
 
   await sendMessage(chatId,
     `✅ <b>КП готово!</b>\n\n` +
     formatSummary(c) +
-    `\n\n📎 <b>Открыть и скачать PDF:</b>\n${kpUrl}\n\n` +
+    `\n\n📎 <b>Открыть детальный КП (для распечатки/PDF):</b>\n${kpUrl}\n\n` +
     `Заявка в БД: <code>${lead.id}</code>\n` +
     `Статус: 📄 КП отправлено (нажми ✅ Договор когда подпишете).`,
-    { disable_web_page_preview: false }
+    { disable_web_page_preview: true }
   );
+}
+
+// Мапим bot Collected → engine BuildingInput
+function mapCollectedToInput(c: Collected): any {
+  // mapping cladding (bot: "sandwich_minvata" | "sandwich_pir" | "proflist" | "none")
+  // Defaults thickness 150мм для сэндвича.
+  const cladding = c.cladding ?? "none";
+  const roofing  = c.roofing  ?? "proflist";
+
+  // bot's roofing="sandwich" → engine "sandwich_minvata" по умолчанию
+  const roofingMapped = roofing === "sandwich" ? "sandwich_minvata" : roofing;
+
+  // bot's foundation: "pile" → "pile_screw"
+  const foundationMap: Record<string, string> = {
+    pile:  "pile_screw",
+    strip: "strip",
+    slab:  "slab_200",
+    none:  "none",
+  };
+  const foundation = foundationMap[c.foundation ?? "none"] ?? "none";
+
+  // bot's object_type — некоторые объекты добавляем
+  return {
+    objectType: c.object_type ?? "sklad",
+    length:     c.length ?? 0,
+    width:      c.width  ?? 0,
+    height:     c.height ?? 0,
+    frame:      c.frame ?? "metal",
+    cladding,
+    claddingThk: cladding.startsWith("sandwich") ? 150 : undefined,
+    roofing:    roofingMapped,
+    roofingThk: roofingMapped.startsWith("sandwich") ? 150 : undefined,
+    foundation,
+    gates:      c.gates ?? [],
+    windows:    c.windows ?? [],
+    doors:      { count: c.doors?.count ?? 0 },
+    logisticsAdd:  c.logistics_add,
+    logisticsDest: c.logistics_dest,
+    notes:      c.notes,
+  };
+}
+
+function buildKpUrl(c: Collected, leadId: string): string {
+  const input = mapCollectedToInput(c);
+  const payload = {
+    input,
+    client: { name: c.client_name, phone: c.phone },
+    leadId,
+  };
+  const json = JSON.stringify(payload);
+  // Base64 UTF-8 (TextEncoder универсально работает в Deno)
+  const bytes = new TextEncoder().encode(json);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  const base64 = btoa(bin);
+  return `${SITE_URL}/kp#data=${encodeURIComponent(base64)}`;
 }

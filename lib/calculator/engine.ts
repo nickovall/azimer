@@ -8,7 +8,7 @@ import { computeGeometry, round } from "./geometry";
 
 import { calculateWalls }      from "./modules/walls";
 import { calculateRoof }       from "./modules/roof";
-import { calculateFrame }      from "./modules/frame";
+import { calculateFrame, detectInsulation } from "./modules/frame";
 import { calculateFoundation } from "./modules/foundation";
 import { calculateOpenings }   from "./modules/openings";
 import { calculateLogistics }  from "./modules/logistics";
@@ -30,8 +30,12 @@ export function calculate(input: BuildingInput): Estimate {
     ...calculateLogistics(input),
   ];
 
+  // 3.1. Для холодных объектов — снижаем работы и НР (меньше детализации, простой монтаж)
+  const insulation = detectInsulation(input);
+  const coldDiscountWorks = insulation === "cold" ? 0.70 : 1.0;
+
   // 4. Итоги
-  const totals = computeTotals(lines);
+  const totals = computeTotals(lines, { worksMultiplier: coldDiscountWorks });
 
   return {
     input,
@@ -51,12 +55,15 @@ export function calculate(input: BuildingInput): Estimate {
   };
 }
 
-function computeTotals(lines: LineItem[]): EstimateTotals {
+function computeTotals(
+  lines: LineItem[],
+  opts: { worksMultiplier?: number } = {},
+): EstimateTotals {
   const sumByCategory = (cat: string) =>
     lines.filter(l => l.category === cat).reduce((s, l) => s + l.total, 0);
 
   const materials = sumByCategory("material");
-  const works     = sumByCategory("work");
+  const works     = sumByCategory("work") * (opts.worksMultiplier ?? 1);
   const logistics = sumByCategory("logistics");
   const direct    = materials + works + logistics;
 
