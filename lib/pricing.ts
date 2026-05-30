@@ -103,17 +103,104 @@ export type Estimate = {
   high: number;
 };
 
+// Подключение к новому движку калькулятора v2
+import { calculate as engineCalculate } from "@/lib/calculator";
+import type { BuildingInput } from "@/lib/calculator/types";
+
+// Мапинг старых ID к новым (бот/сайт wizard → engine input)
+const mapFrame = (s: string): BuildingInput["frame"] =>
+  s === "lstk" ? "lstk" : s === "metal" ? "metal" : "modular";
+
+const mapCladding = (s: string): BuildingInput["cladding"] =>
+  s === "sandwich_minvata" ? "sandwich_minvata"
+  : s === "sandwich_pir"    ? "sandwich_pir"
+  : s === "proflist"        ? "proflist"
+  : "none";
+
+const mapRoofing = (s: string): BuildingInput["roofing"] =>
+  s === "sandwich" ? "sandwich_minvata" : s === "proflist" ? "proflist" : "proflist";
+
+const mapFoundation = (s: string): BuildingInput["foundation"] => {
+  if (s === "pile")  return "pile_screw";
+  if (s === "strip") return "strip";
+  if (s === "slab")  return "slab_200";
+  return "none";
+};
+
+export function calcEstimate(s: WizardState): Estimate {
+  const area = Math.max(0, s.length * s.width);
+  const wallArea = Math.max(0, 2 * (s.length + s.width) * s.height);
+
+  // Маппинг wizard state → BuildingInput для нового движка
+  const input: BuildingInput = {
+    objectType: (s.objectType || "sklad") as BuildingInput["objectType"],
+    length:     s.length,
+    width:      s.width,
+    height:     s.height,
+    frame:      mapFrame(s.frame),
+    cladding:   mapCladding(s.cladding),
+    claddingThk: mapCladding(s.cladding).startsWith("sandwich") ? 150 : undefined,
+    roofing:    mapRoofing(s.roofing),
+    roofingThk: mapRoofing(s.roofing).startsWith("sandwich") ? 150 : undefined,
+    foundation: mapFoundation(s.foundation),
+    gates:      (s.options.gate ?? 0) > 0   ? [{ size: "4x4",       count: s.options.gate }]   : [],
+    windows:    (s.options.window ?? 0) > 0 ? [{ size: "1500x2000", count: s.options.window }] : [],
+    doors:      { count: s.options.door ?? 0 },
+    logisticsAdd: false,
+  };
+
+  // Если калькулятор не готов посчитать (нулевые размеры) — возвращаем пустое
+  if (area <= 0 || s.height <= 0 || !s.frame) {
+    return { area, wallArea, lines: [], base: 0, low: 0, high: 0 };
+  }
+
+  const eng = engineCalculate(input);
+
+  // Группируем строки движка по категориям для отображения в UI
+  const groupSums: Record<string, number> = {};
+  for (const l of eng.lines) {
+    groupSums[l.group] = (groupSums[l.group] ?? 0) + l.total;
+  }
+  const groupLabels: Record<string, string> = {
+    frame:      "Каркас",
+    walls:      "Стеновое ограждение",
+    roof:       "Кровля",
+    foundation: "Фундамент",
+    openings:   "Доборные элементы",
+    logistics:  "Логистика",
+  };
+  const lines: { label: string; value: number }[] = [];
+  for (const [key, value] of Object.entries(groupSums)) {
+    if (value > 0) lines.push({ label: groupLabels[key] ?? key, value });
+  }
+  // Накладные/прибыль/маржа/наценка добавляем как отдельную строку
+  const overheadTotal = eng.totals.overhead + eng.totals.profit + eng.totals.margin + eng.totals.markup;
+  if (overheadTotal > 0) {
+    lines.push({ label: "Накладные расходы и маржа", value: overheadTotal });
+  }
+
+  return {
+    area,
+    wallArea,
+    lines,
+    base: eng.totals.final,
+    low:  eng.totals.low,
+    high: eng.totals.high,
+  };
+}
+
+// ── Legacy helpers (оставлены для обратной совместимости, не используются)
+
 const rateOf = (list: OptionCard[], id: string) =>
   list.find((x) => x.id === id)?.rate ?? 0;
 
-export function calcEstimate(s: WizardState): Estimate {
+function _legacyCalcEstimate(s: WizardState): Estimate {
   const area = Math.max(0, s.length * s.width);
   const wallArea = Math.max(0, 2 * (s.length + s.width) * s.height);
   const isModular = s.frame === "modular";
 
   const lines: { label: string; value: number }[] = [];
 
-  // Каркас (для модульного — ставка уже включает контур)
   const frameCost = area * rateOf(frameTypes, s.frame);
   lines.push({ label: "Каркас", value: frameCost });
 
