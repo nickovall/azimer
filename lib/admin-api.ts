@@ -91,15 +91,16 @@ export async function adminFetch<T = unknown>(
   // deno-lint-ignore-explicit-any
   payload: { action: string; [k: string]: any },
 ): Promise<T> {
+  // Пароль кладём в body, а не в header — Supabase Gateway режет custom-headers
+  // на OPTIONS preflight (whitelist: authorization, apikey, content-type, ...).
   const r = await fetch(ADMIN_FN_URL, {
     method: "POST",
     headers: {
-      "Content-Type":      "application/json",
-      "Authorization":     "Bearer " + PUBLISHABLE_KEY,
-      "apikey":            PUBLISHABLE_KEY,
-      "x-admin-password":  password,
+      "Content-Type":  "application/json",
+      "Authorization": "Bearer " + PUBLISHABLE_KEY,
+      "apikey":        PUBLISHABLE_KEY,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, __pw: password }),
   });
   if (!r.ok) {
     const j = await r.json().catch(() => ({}));

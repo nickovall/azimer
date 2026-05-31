@@ -17,7 +17,9 @@ const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: fal
 const CORS = {
   "Access-Control-Allow-Origin":  "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, x-admin-password, Authorization",
+  // x-admin-password больше не используется — пароль теперь в body как __pw,
+  // потому что Supabase Gateway не пропускает custom headers через preflight.
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey",
 };
 
 const ALLOWED_LEAD_STATUSES = new Set(["new", "contacted", "kp_sent", "won", "lost"]);
@@ -33,15 +35,15 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
   if (req.method !== "POST")    return json({ error: "POST only" }, 405);
 
-  // ─── Auth via shared password header ───
-  const pw = req.headers.get("x-admin-password") ?? "";
-  if (!ADMIN_PASSWORD || pw !== ADMIN_PASSWORD) {
-    return json({ error: "Forbidden" }, 403);
-  }
-
   let body: any;
   try { body = await req.json(); }
   catch { return json({ error: "Invalid JSON" }, 400); }
+
+  // ─── Auth: пароль в body (__pw) ───
+  const pw = typeof body?.__pw === "string" ? body.__pw : "";
+  if (!ADMIN_PASSWORD || pw !== ADMIN_PASSWORD) {
+    return json({ error: "Forbidden" }, 403);
+  }
 
   const action = body?.action;
 
