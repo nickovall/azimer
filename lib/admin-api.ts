@@ -3,7 +3,14 @@
 export const ADMIN_FN_URL =
   (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "") + "/functions/v1/admin-api";
 
-export const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+// ВАЖНО: для новых Edge Functions в Supabase нужен publishable key (sb_publishable_…),
+// а legacy anon-ключ отбивается на gateway (INVALID_CREDENTIALS).
+// Старые функции (smooth-task) и REST API продолжают работать со старым anon ключом —
+// поэтому supabase.ts использует ANON, а admin-api отдельно ниже.
+export const PUBLISHABLE_KEY =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  ?? "";
 
 export type LeadStatus = "new" | "contacted" | "kp_sent" | "won" | "lost";
 export type LeadSource = "contact" | "project" | "partner" | "estimate";
@@ -87,7 +94,8 @@ export async function adminFetch<T = unknown>(
     method: "POST",
     headers: {
       "Content-Type":      "application/json",
-      "Authorization":     "Bearer " + ANON_KEY,
+      "Authorization":     "Bearer " + PUBLISHABLE_KEY,
+      "apikey":            PUBLISHABLE_KEY,
       "x-admin-password":  password,
     },
     body: JSON.stringify(payload),

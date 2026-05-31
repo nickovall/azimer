@@ -8,6 +8,7 @@ pages:
   variables:
     NEXT_PUBLIC_SUPABASE_URL: https://objgpsjyftdrhafapwvw.supabase.co
     NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9iamdwc2p5ZnRkcmhhZmFwd3Z3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1NzMyNTUsImV4cCI6MjA5NTE0OTI1NX0.G3SjDMrYLhRPw_WboewcBMvBunMx89TS9X_mAlkvdXw
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable__2Mwa1SbgAnQZVJ_4CdXNA_4iRpCXin
     NEXT_PUBLIC_YANDEX_METRIKA_ID: "109414059"
   cache:
     key:
