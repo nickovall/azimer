@@ -22,6 +22,7 @@ type StepKey =
   | 'frame' | 'cladding' | 'cladding_thk' | 'roofing'
   | 'foundation'
   | 'gates' | 'windows' | 'doors'
+  | 'crane'
   | 'notes'
   | 'confirm'
   | 'done';
@@ -29,19 +30,20 @@ type StepKey =
 interface Collected {
   client_name?: string;
   phone?:       string;
-  region?:      string;       // НОВОЕ: ID региона из regions.ts
+  region?:      string;       // ID региона из regions.ts
   object_type?: string;
   length?:      number;
   width?:       number;
   height?:      number;
   frame?:       string;
   cladding?:    string;
-  cladding_thk?: number;      // НОВОЕ: 50/80/100/120/150/200/250 мм
+  cladding_thk?: number;      // 50/80/100/120/150/200/250 мм
   roofing?:     string;
   foundation?:  string;
   gates?:       { size: string; count: number }[];
   windows?:     { size: string; count: number }[];
   doors?:       { count: number; note?: string };
+  crane_t?:     number;       // НОВОЕ: грузоподъёмность крана в тоннах (0 = нет крана)
   notes?:       string;
 }
 
@@ -127,6 +129,13 @@ function calcEstimate(c: Collected) {
 
   // Логистика НЕ учитывается в калькуляторе — Азамат считает её отдельно
   // (нет своего производства, доставка зависит от конкретного партнёра)
+
+  // Надбавка за мостовой кран: +5% за каждую тонну (подкрановые балки + усиление колонн)
+  const craneT = c.crane_t ?? 0;
+  if (craneT > 0 && craneT < 20) {
+    const craneCost = lines.reduce((s, l) => s + l.value, 0) * (craneT * 0.05);
+    lines.push({ label: `Подкрановые балки + усиление под кран ${craneT}т`, value: craneCost });
+  }
 
   const total = lines.reduce((sum, l) => sum + l.value, 0);
   const low  = Math.round((total * 0.9)  / 1000) * 1000;
@@ -255,8 +264,16 @@ const STEPS: Record<StepKey, Step> = {
     prompt: '13/14  <b>Ворота:</b>\nКоличество и размер. Примеры:\n• <code>1x4x4</code> — одни 4×4\n• <code>4x4 = 1, 3x3 = 2</code> — несколько\n• <code>нет</code>' },
   windows: { key: 'windows', type: 'optional_text', next: 'doors', optional: true,
     prompt: '<b>Окна:</b>\nПримеры:\n• <code>2x1500x2000</code> — два окна\n• <code>1500x2000 = 2, 1200x1500 = 3</code>\n• <code>нет</code>' },
-  doors: { key: 'doors', type: 'optional_text', next: 'notes', optional: true,
-    prompt: '14/14  <b>Двери:</b>\nПример: <code>2</code> или <code>нет</code>' },
+  doors: { key: 'doors', type: 'optional_text', next: 'crane', optional: true,
+    prompt: '14/15  <b>Двери:</b>\nПример: <code>2</code> или <code>нет</code>' },
+  crane: { key: 'crane', type: 'buttons', next: 'notes',
+    prompt: '15/15  <b>Мостовой кран внутри здания:</b>\nЕсли есть — нужны подкрановые балки, усиление колонн (+10-50% к каркасу)',
+    buttons: [
+      [{ text: 'Нет крана',         data: 'w:crane:0' }],
+      [{ text: 'Кран-балка 1т',     data: 'w:crane:1' }, { text: 'Кран 3,2т', data: 'w:crane:3.2' }],
+      [{ text: 'Кран 5т',           data: 'w:crane:5' }, { text: 'Кран 10т',  data: 'w:crane:10' }],
+      [{ text: 'Больше 10т (инженер)', data: 'w:crane:20' }],
+    ] },
   notes: { key: 'notes', type: 'optional_text', next: 'confirm', optional: true,
     prompt: '<b>Примечание</b> (необязательно):\nОсобые требования, сроки, контакты. Или <code>нет</code>.\n\n<i>⚠️ Логистика (доставка материалов) рассчитывается отдельно после согласования.</i>' },
   confirm: { key: 'confirm', type: 'buttons', next: 'done', prompt: '',
@@ -295,7 +312,14 @@ function formatSummary(c: Collected): string {
   msg += `• Ворота: ${fmtItems(c.gates)}\n`;
   msg += `• Окна: ${fmtItems(c.windows)}\n`;
   msg += `• Двери: ${c.doors?.count ? c.doors.count + ' шт' : 'нет'}\n`;
+  if ((c.crane_t ?? 0) > 0) {
+    msg += `• <b>Мостовой кран:</b> ${c.crane_t}т\n`;
+  }
   if (c.notes) msg += `\n<i>Примечание: ${c.notes}</i>\n`;
+  // Если кран >10т — требуется индивидуальный расчёт инженера
+  if ((c.crane_t ?? 0) >= 20) {
+    msg += `\n🔴 <b>ВНИМАНИЕ:</b> Кран >10т требует индивидуального инженерного расчёта.\nКП будет персональным после согласования с инженером.\n`;
+  }
   msg += `\n<b>📊 СМЕТА (предварительная)</b>\n`;
   for (const line of lines) msg += `${line.label}: <code>${fmtRub(line.value)}</code>\n`;
   msg += `\n<b>ИТОГО:</b> <b>${fmtRub(total)}</b>\n`;
@@ -893,6 +917,7 @@ async function handleWizardText(chatId: number, text: string): Promise<boolean> 
     case "cladding_thk":
     case "roofing":
     case "foundation":
+    case "crane":
     case "confirm":
       await sendMessage(chatId, "Здесь нужно нажать кнопку выше ↑");
       return true;
@@ -944,6 +969,19 @@ async function handleWizardCallback(cb: any) {
     }
     await answerCallback(cb.id, `${thk} мм`);
     await saveAndAdvance(chatId, session, "cladding_thk", thk, "roofing");
+    return;
+  }
+
+  // Грузоподъёмность крана — число с дробной частью
+  if (field === "crane") {
+    const t = parseFloat(value);
+    if (isNaN(t)) {
+      await answerCallback(cb.id, "Не понял");
+      return;
+    }
+    const label = t === 0 ? "Без крана" : `Кран ${t}т`;
+    await answerCallback(cb.id, label);
+    await saveAndAdvance(chatId, session, "crane_t", t, "notes");
     return;
   }
 
@@ -1064,6 +1102,7 @@ function mapCollectedToInput(c: Collected): any {
     gates:      c.gates ?? [],
     windows:    c.windows ?? [],
     doors:      { count: c.doors?.count ?? 0 },
+    craneCapacityT: c.crane_t ?? 0,
     notes:      c.notes,
   };
 }
