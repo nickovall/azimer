@@ -114,65 +114,75 @@ export default function KpPage() {
         <div className="mb-8">
           <p className="mb-4 font-mono text-xs uppercase tracking-[0.2em] text-orange">Спецификация и смета</p>
 
-          {Object.entries(groups).map(([groupKey, lines]) => {
-            const groupTotal = lines.reduce((s, l) => s + l.total, 0);
-            return (
-              <div key={groupKey} className="mb-6 rounded-2xl border border-line bg-white overflow-hidden">
-                <div className="flex items-center justify-between border-b border-line bg-light/50 px-6 py-3">
-                  <p className="font-semibold text-graphite-900">{groupLabel(groupKey)}</p>
-                  <p className="text-sm font-bold text-orange">{formatRub(groupTotal)}</p>
-                </div>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-line/50 text-xs uppercase tracking-wider text-graphite-900/40">
-                      <th className="px-6 py-2 text-left font-medium">Наименование</th>
-                      <th className="px-2 py-2 text-right font-medium">Кол-во</th>
-                      <th className="px-2 py-2 text-right font-medium">Ед.</th>
-                      <th className="px-2 py-2 text-right font-medium">Цена</th>
-                      <th className="px-6 py-2 text-right font-medium">Сумма</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lines.map((l, i) => (
-                      <tr key={i} className="border-b border-line/30 last:border-0">
-                        <td className="px-6 py-2.5">
-                          <div className={`${l.category === "work" ? "italic text-graphite-900/70" : "text-graphite-900"}`}>
-                            {l.name}
-                          </div>
-                          {l.note && <div className="mt-0.5 text-xs text-graphite-900/40">{l.note}</div>}
-                        </td>
-                        <td className="px-2 py-2.5 text-right font-mono">{l.quantity}</td>
-                        <td className="px-2 py-2.5 text-right text-graphite-900/60">{l.unit}</td>
-                        <td className="px-2 py-2.5 text-right font-mono text-graphite-900/70">{formatRub(l.unitPrice)}</td>
-                        <td className="px-6 py-2.5 text-right font-mono font-semibold">{formatRub(l.total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+          {(() => {
+            // Распределяем НР+СП+маржу+наценку пропорционально на каждую группу
+            const directSum = Object.values(groups).reduce(
+              (s, ls) => s + ls.reduce((a, l) => a + l.total, 0), 0,
             );
-          })}
+            const mul = directSum > 0 ? estimate.totals.final / directSum : 1;
+            return Object.entries(groups).map(([groupKey, lines]) => {
+              const groupTotalRaw = lines.reduce((s, l) => s + l.total, 0);
+              const groupTotal = Math.round(groupTotalRaw * mul);
+              return (
+                <div key={groupKey} className="mb-6 rounded-2xl border border-line bg-white overflow-hidden">
+                  <div className="flex items-center justify-between border-b border-line bg-light/50 px-6 py-3">
+                    <p className="font-semibold text-graphite-900">{groupLabel(groupKey)}</p>
+                    <p className="text-sm font-bold text-orange">{formatRub(groupTotal)}</p>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-line/50 text-xs uppercase tracking-wider text-graphite-900/40">
+                        <th className="px-6 py-2 text-left font-medium">Наименование</th>
+                        <th className="px-2 py-2 text-right font-medium">Кол-во</th>
+                        <th className="px-2 py-2 text-right font-medium">Ед.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lines.map((l, i) => (
+                        <tr key={i} className="border-b border-line/30 last:border-0">
+                          <td className="px-6 py-2.5">
+                            <div className={`${l.category === "work" ? "italic text-graphite-900/70" : "text-graphite-900"}`}>
+                              {l.name}
+                            </div>
+                            {l.note && <div className="mt-0.5 text-xs text-graphite-900/40">{l.note}</div>}
+                          </td>
+                          <td className="px-2 py-2.5 text-right font-mono">{l.quantity}</td>
+                          <td className="px-2 py-2.5 text-right text-graphite-900/60">{l.unit}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            });
+          })()}
         </div>
 
-        {/* ─────────── Итоги ─────────── */}
+        {/* ─────────── Итоги (без раскрытия маржи клиенту) ─────────── */}
         <div className="rounded-2xl bg-graphite-950 p-8 text-light">
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-orange">Итого</p>
-          <div className="mt-5 space-y-2 text-sm">
-            <Row label="Материалы" value={formatRub(estimate.totals.materials)} />
-            <Row label="Работы" value={formatRub(estimate.totals.works)} />
-            {estimate.totals.logistics > 0 && <Row label="Логистика" value={formatRub(estimate.totals.logistics)} />}
-            <Row label="Прямые затраты" value={formatRub(estimate.totals.direct)} bold />
-            <Row label="Накладные расходы (МДС 81-33)" value={formatRub(estimate.totals.overhead)} muted />
-            <Row label="Сметная прибыль (МДС 81-25)" value={formatRub(estimate.totals.profit)} muted />
-            <Row label="Резерв" value={formatRub(estimate.totals.margin)} muted />
-          </div>
+          {(() => {
+            // Распределяем накладные/прибыль/маржу/наценку пропорционально на материалы и работы
+            const directSum = estimate.totals.materials + estimate.totals.works + estimate.totals.logistics;
+            const mul = directSum > 0 ? estimate.totals.final / directSum : 1;
+            const matFinal = Math.round(estimate.totals.materials * mul);
+            const wrkFinal = Math.round(estimate.totals.works * mul);
+            const logFinal = Math.round(estimate.totals.logistics * mul);
+            return (
+              <div className="mt-5 space-y-2 text-sm">
+                <Row label="Материалы (с доставкой и расходниками)" value={formatRub(matFinal)} />
+                <Row label="Работы (монтаж, сборка, отделка)" value={formatRub(wrkFinal)} />
+                {logFinal > 0 && <Row label="Логистика по направлению" value={formatRub(logFinal)} />}
+              </div>
+            );
+          })()}
           <div className="mt-6 border-t border-light/20 pt-6">
             <div className="flex items-baseline justify-between">
               <span className="text-lg font-semibold">Итоговая стоимость</span>
               <span className="text-4xl font-extrabold tracking-tight text-orange">{formatRub(estimate.totals.final)}</span>
             </div>
             <p className="mt-2 text-xs text-light/50">
-              Диапазон: {formatRub(estimate.totals.low)} — {formatRub(estimate.totals.high)}
+              Диапазон уточнения: {formatRub(estimate.totals.low)} — {formatRub(estimate.totals.high)}
             </p>
           </div>
         </div>

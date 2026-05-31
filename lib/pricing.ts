@@ -156,11 +156,18 @@ export function calcEstimate(s: WizardState): Estimate {
 
   const eng = engineCalculate(input);
 
-  // Группируем строки движка по категориям для отображения в UI
+  // Группируем строки движка по категориям и РАСПРЕДЕЛЯЕМ НР+СП+маржу+наценку
+  // пропорционально каждой группе — чтобы клиент НЕ видел отдельной строки "маржа".
+  // Это стандартная практика в КП: цены позиций "под ключ" включают всё.
   const groupSums: Record<string, number> = {};
   for (const l of eng.lines) {
     groupSums[l.group] = (groupSums[l.group] ?? 0) + l.total;
   }
+
+  const directSum = Object.values(groupSums).reduce((s, v) => s + v, 0);
+  // Множитель = final / direct (распределяем НР+СП+маржу+наценку пропорционально)
+  const multiplier = directSum > 0 ? eng.totals.final / directSum : 1;
+
   const groupLabels: Record<string, string> = {
     frame:      "Каркас",
     walls:      "Стеновое ограждение",
@@ -171,12 +178,12 @@ export function calcEstimate(s: WizardState): Estimate {
   };
   const lines: { label: string; value: number }[] = [];
   for (const [key, value] of Object.entries(groupSums)) {
-    if (value > 0) lines.push({ label: groupLabels[key] ?? key, value });
-  }
-  // Накладные/прибыль/маржа/наценка добавляем как отдельную строку
-  const overheadTotal = eng.totals.overhead + eng.totals.profit + eng.totals.margin + eng.totals.markup;
-  if (overheadTotal > 0) {
-    lines.push({ label: "Накладные расходы и маржа", value: overheadTotal });
+    if (value > 0) {
+      lines.push({
+        label: groupLabels[key] ?? key,
+        value: Math.round(value * multiplier),
+      });
+    }
   }
 
   return {
