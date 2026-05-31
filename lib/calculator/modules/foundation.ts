@@ -6,6 +6,7 @@ import { round, ceil } from "../geometry";
 import { FOUNDATION, WORKS } from "../catalog";
 import { FOUNDATION_NORMS } from "../consumption";
 import { detectInsulation } from "./frame";
+import { getRegion } from "../regions";
 
 export function calculateFoundation(input: BuildingInput, geo: Geometry): LineItem[] {
   switch (input.foundation) {
@@ -28,23 +29,41 @@ export function calculateFoundation(input: BuildingInput, geo: Geometry): LineIt
 function screwPile(input: BuildingInput, geo: Geometry): LineItem[] {
   const lines: LineItem[] = [];
 
-  // Подбор плотности свай по типу нагрузки и комплектации
+  const region = getRegion(input.region);
   const isCold     = detectInsulation(input) === "cold";
   const isSwelling = input.soilType === "swelling" || input.soilType === "clay";
   const isHeavyLoad = (input.craneCapacityT ?? 0) > 0 || (input.frame === "metal" && !isCold);
 
-  // Для холодных — самые лёгкие сваи и редкий шаг
-  const density = isCold
-    ? 0.30   // ~1 свая на 3.3 м² для холодного ангара
+  // Подбор плотности свай по нагрузке и комплектации
+  let density = isCold
+    ? 0.30
     : isSwelling
       ? FOUNDATION_NORMS.screw_pile_density_per_m2.swelling
       : isHeavyLoad
         ? FOUNDATION_NORMS.screw_pile_density_per_m2.loaded
         : FOUNDATION_NORMS.screw_pile_density_per_m2.standard;
 
+  // ВЕЧНАЯ МЕРЗЛОТА — сваи 6-8 метров, плотнее шаг, специальная установка
+  // Стоимость 1 сваи вырастает в 2-2.5 раза, расход на 30% больше
+  if (region.permafrost) {
+    density *= 1.30;
+  }
+
   const piles = ceil(geo.floorArea * density);
-  const pileUnit = isHeavyLoad ? FOUNDATION.screw_pile_133_3000 : FOUNDATION.screw_pile_108_2500;
-  const pileName = isHeavyLoad ? "Свая винтовая Ø133, L=3000 мм" : "Свая винтовая Ø108, L=2500 мм";
+
+  // Цена и название сваи
+  let pileUnit: number;
+  let pileName: string;
+  if (region.permafrost) {
+    pileUnit = isHeavyLoad ? 18000 : 14500; // в 2 раза дороже за 6-8м сваю
+    pileName = isHeavyLoad ? "Свая винтовая Ø159, L=8000 мм (мерзлота)" : "Свая винтовая Ø133, L=6000 мм (мерзлота)";
+  } else if (isHeavyLoad) {
+    pileUnit = FOUNDATION.screw_pile_133_3000;
+    pileName = "Свая винтовая Ø133, L=3000 мм";
+  } else {
+    pileUnit = FOUNDATION.screw_pile_108_2500;
+    pileName = "Свая винтовая Ø108, L=2500 мм";
+  }
 
   lines.push({
     category: "material", group: "foundation",

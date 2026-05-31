@@ -17,11 +17,11 @@ const SITE_URL = Deno.env.get("SITE_URL") ?? "https://azimer.ru";
 // ════════════════════════════════════════════════════════════════
 
 type StepKey =
-  | 'client_name' | 'phone' | 'object_type'
+  | 'client_name' | 'phone' | 'region' | 'object_type'
   | 'length' | 'width' | 'height'
-  | 'frame' | 'cladding' | 'roofing' | 'foundation'
+  | 'frame' | 'cladding' | 'cladding_thk' | 'roofing'
+  | 'foundation'
   | 'gates' | 'windows' | 'doors'
-  | 'logistics_choice' | 'logistics_dest'
   | 'notes'
   | 'confirm'
   | 'done';
@@ -29,20 +29,19 @@ type StepKey =
 interface Collected {
   client_name?: string;
   phone?:       string;
+  region?:      string;       // НОВОЕ: ID региона из regions.ts
   object_type?: string;
   length?:      number;
   width?:       number;
   height?:      number;
   frame?:       string;
   cladding?:    string;
+  cladding_thk?: number;      // НОВОЕ: 50/80/100/120/150/200/250 мм
   roofing?:     string;
   foundation?:  string;
   gates?:       { size: string; count: number }[];
   windows?:     { size: string; count: number }[];
   doors?:       { count: number; note?: string };
-  logistics_add?:    boolean;
-  logistics_dest?:   string;
-  logistics_amount?: number;
   notes?:       string;
 }
 
@@ -80,14 +79,17 @@ const FOUNDATIONS = [
   { id: 'slab',  label: 'Плита 200мм',     rate: 6500 },
 ];
 
-const LOGISTICS = [
-  { id: 'krasnoyarsk', label: 'Красноярск',         amount: 0      },
-  { id: 'hakasia',     label: 'Хакасия (Абакан)',   amount: 200000 },
-  { id: 'kemerovo',    label: 'Кемерово',           amount: 250000 },
-  { id: 'irkutsk',     label: 'Иркутск',            amount: 350000 },
-  { id: 'altai',       label: 'Алтай (Барнаул)',    amount: 280000 },
-  { id: 'other',       label: 'Другое направление', amount: 0      },
-];
+// Регионы строительства (для нового шага визарда). ID совпадает с lib/calculator/regions.ts
+const REGIONS_BOT: Record<string, string> = {
+  krsk_city:       'Красноярск + пригороды',
+  krsk_south:      'Юг края + Хакасия',
+  krsk_kansk:      'Канск / Ачинск',
+  krsk_north_pre:  'Лесосибирск / Енисейск',
+  krsk_priangar:   'Богучаны / Кодинск',
+  krsk_evenkia:    'Эвенкия (мерзлота)',
+  krsk_taymyr:     'Таймыр / Норильск',
+  other:           'Другой регион',
+};
 
 const GATE_PRICE   = 180000;
 const WINDOW_PRICE = 22000;
@@ -123,10 +125,8 @@ function calcEstimate(c: Collected) {
   const doorCount = c.doors?.count ?? 0;
   if (doorCount > 0) lines.push({ label: `Двери (${doorCount} шт)`, value: doorCount * DOOR_PRICE });
 
-  if (c.logistics_add && (c.logistics_amount ?? 0) > 0) {
-    const dest = LOGISTICS.find(l => l.id === c.logistics_dest)?.label ?? 'доставка';
-    lines.push({ label: `Логистика (${dest})`, value: c.logistics_amount! });
-  }
+  // Логистика НЕ учитывается в калькуляторе — Азамат считает её отдельно
+  // (нет своего производства, доставка зависит от конкретного партнёра)
 
   const total = lines.reduce((sum, l) => sum + l.value, 0);
   const low  = Math.round((total * 0.9)  / 1000) * 1000;
@@ -188,43 +188,63 @@ interface Step {
 const STEPS: Record<StepKey, Step> = {
   client_name: { key: 'client_name', type: 'text', next: 'phone',
     prompt: '1/14  <b>Имя клиента или название компании:</b>\nПример: Иванов И.И. или ООО Сибсталь' },
-  phone: { key: 'phone', type: 'text', next: 'object_type',
+  phone: { key: 'phone', type: 'text', next: 'region',
     prompt: '2/14  <b>Телефон клиента:</b>\nПример: +7 999 123 45 67' },
+  region: { key: 'region', type: 'buttons', next: 'object_type',
+    prompt: '3/14  <b>Где строим?</b>\nВыбор влияет на снеговую нагрузку, сейсмику, мерзлоту',
+    buttons: [
+      [{ text: 'Красноярск + пригороды',     data: 'w:region:krsk_city' }],
+      [{ text: 'Юг края (Минусинск, Хакасия)', data: 'w:region:krsk_south' }],
+      [{ text: 'Канск / Ачинск',             data: 'w:region:krsk_kansk' }],
+      [{ text: 'Лесосибирск / Енисейск',     data: 'w:region:krsk_north_pre' }],
+      [{ text: 'Богучаны / Кодинск (V зона)', data: 'w:region:krsk_priangar' }],
+      [{ text: '❄️ Эвенкия (мерзлота)',     data: 'w:region:krsk_evenkia' }],
+      [{ text: '❄️ Таймыр / Норильск',      data: 'w:region:krsk_taymyr' }],
+      [{ text: 'Тува / Кемерово / Иркутск',  data: 'w:region:other' }],
+    ] },
   object_type: { key: 'object_type', type: 'buttons', next: 'length',
-    prompt: '3/14  <b>Тип объекта:</b>',
+    prompt: '4/14  <b>Тип объекта:</b>',
     buttons: [
       [{ text: 'Склад',        data: 'w:object_type:sklad' },      { text: 'Ангар',        data: 'w:object_type:angar' }],
       [{ text: 'Производство', data: 'w:object_type:production' }, { text: 'Коммерческое', data: 'w:object_type:commercial' }],
       [{ text: 'Навес',        data: 'w:object_type:naves' },      { text: 'Модульное',    data: 'w:object_type:modular' }],
     ] },
   length: { key: 'length', type: 'numeric', next: 'width',
-    prompt: '4/14  <b>Длина в метрах:</b>\nПример: 18' },
+    prompt: '5/14  <b>Длина в метрах:</b>\nПример: 18' },
   width: { key: 'width', type: 'numeric', next: 'height',
-    prompt: '5/14  <b>Ширина в метрах:</b>\nПример: 6' },
+    prompt: '6/14  <b>Ширина в метрах:</b>\nПример: 6' },
   height: { key: 'height', type: 'numeric', next: 'frame',
-    prompt: '6/14  <b>Высота в метрах:</b>\nПример: 4' },
+    prompt: '7/14  <b>Высота в метрах:</b>\nПример: 4' },
   frame: { key: 'frame', type: 'buttons', next: 'cladding',
-    prompt: '7/14  <b>Каркас:</b>',
+    prompt: '8/14  <b>Каркас:</b>',
     buttons: [
       [{ text: 'ЛСТК',           data: 'w:frame:lstk' }],
       [{ text: 'Металлокаркас',  data: 'w:frame:metal' }],
       [{ text: 'Модульный',      data: 'w:frame:modular' }],
     ] },
-  cladding: { key: 'cladding', type: 'buttons', next: 'roofing',
-    prompt: '8/14  <b>Стены:</b>',
+  cladding: { key: 'cladding', type: 'buttons', next: 'cladding_thk',
+    prompt: '9/14  <b>Стены:</b>',
     buttons: [
       [{ text: 'Без стен', data: 'w:cladding:none' }, { text: 'Профлист', data: 'w:cladding:proflist' }],
-      [{ text: 'Сэндвич минвата 150', data: 'w:cladding:sandwich_minvata' }],
-      [{ text: 'Сэндвич PIR 150',     data: 'w:cladding:sandwich_pir' }],
+      [{ text: 'Сэндвич минвата', data: 'w:cladding:sandwich_minvata' }],
+      [{ text: 'Сэндвич PIR',     data: 'w:cladding:sandwich_pir' }],
+    ] },
+  cladding_thk: { key: 'cladding_thk', type: 'buttons', next: 'roofing',
+    prompt: '10/14  <b>Толщина панели (мм):</b>',
+    buttons: [
+      [{ text: '50 мм',  data: 'w:cladding_thk:50' },  { text: '80 мм',  data: 'w:cladding_thk:80' }],
+      [{ text: '100 мм', data: 'w:cladding_thk:100' }, { text: '120 мм', data: 'w:cladding_thk:120' }],
+      [{ text: '150 мм (стандарт)', data: 'w:cladding_thk:150' }],
+      [{ text: '200 мм (премиум утепление)', data: 'w:cladding_thk:200' }],
     ] },
   roofing: { key: 'roofing', type: 'buttons', next: 'foundation',
-    prompt: '9/14  <b>Кровля:</b>',
+    prompt: '11/14  <b>Кровля:</b>',
     buttons: [
       [{ text: 'Профлист',      data: 'w:roofing:proflist' }],
-      [{ text: 'Сэндвич 150мм', data: 'w:roofing:sandwich' }],
+      [{ text: 'Сэндвич (такая же толщина как стены)', data: 'w:roofing:sandwich' }],
     ] },
   foundation: { key: 'foundation', type: 'buttons', next: 'gates',
-    prompt: '10/14  <b>Фундамент:</b>',
+    prompt: '12/14  <b>Фундамент:</b>',
     buttons: [
       [{ text: 'Без фундамента',  data: 'w:foundation:none' }],
       [{ text: 'Свайно-винтовой', data: 'w:foundation:pile' }],
@@ -232,29 +252,13 @@ const STEPS: Record<StepKey, Step> = {
       [{ text: 'Плита 200мм',     data: 'w:foundation:slab' }],
     ] },
   gates: { key: 'gates', type: 'optional_text', next: 'windows', optional: true,
-    prompt: '11/14  <b>Ворота:</b>\nКоличество и размер. Примеры:\n• <code>1x4x4</code> — одни 4×4\n• <code>4x4 = 1, 3x3 = 2</code> — несколько\n• <code>нет</code>' },
+    prompt: '13/14  <b>Ворота:</b>\nКоличество и размер. Примеры:\n• <code>1x4x4</code> — одни 4×4\n• <code>4x4 = 1, 3x3 = 2</code> — несколько\n• <code>нет</code>' },
   windows: { key: 'windows', type: 'optional_text', next: 'doors', optional: true,
-    prompt: '12/14  <b>Окна:</b>\nПримеры:\n• <code>2x1500x2000</code> — два окна\n• <code>1500x2000 = 2, 1200x1500 = 3</code>\n• <code>нет</code>' },
-  doors: { key: 'doors', type: 'optional_text', next: 'logistics_choice', optional: true,
-    prompt: '13/14  <b>Двери:</b>\nПример: <code>2</code> или <code>нет</code>' },
-  logistics_choice: { key: 'logistics_choice', type: 'buttons', next: 'notes',
-    prompt: '14/14  <b>Логистика (доставка материалов):</b>',
-    buttons: [
-      [{ text: '🚚 Добавить доставку', data: 'w:logistics_choice:yes' }],
-      [{ text: '⏭ Не нужно',           data: 'w:logistics_choice:no'  }],
-    ] },
-  logistics_dest: { key: 'logistics_dest', type: 'buttons', next: 'notes',
-    prompt: '<b>Куда везём?</b>',
-    buttons: [
-      [{ text: 'Красноярск (включено)',  data: 'w:logistics_dest:krasnoyarsk' }],
-      [{ text: 'Хакасия — +200К',         data: 'w:logistics_dest:hakasia' }],
-      [{ text: 'Кемерово — +250К',        data: 'w:logistics_dest:kemerovo' }],
-      [{ text: 'Иркутск — +350К',         data: 'w:logistics_dest:irkutsk' }],
-      [{ text: 'Алтай — +280К',           data: 'w:logistics_dest:altai' }],
-      [{ text: 'Другое (указать в примечании)', data: 'w:logistics_dest:other' }],
-    ] },
+    prompt: '<b>Окна:</b>\nПримеры:\n• <code>2x1500x2000</code> — два окна\n• <code>1500x2000 = 2, 1200x1500 = 3</code>\n• <code>нет</code>' },
+  doors: { key: 'doors', type: 'optional_text', next: 'notes', optional: true,
+    prompt: '14/14  <b>Двери:</b>\nПример: <code>2</code> или <code>нет</code>' },
   notes: { key: 'notes', type: 'optional_text', next: 'confirm', optional: true,
-    prompt: '<b>Примечание</b> (необязательно):\nОсобые требования, сроки, контакты. Или <code>нет</code>.' },
+    prompt: '<b>Примечание</b> (необязательно):\nОсобые требования, сроки, контакты. Или <code>нет</code>.\n\n<i>⚠️ Логистика (доставка материалов) рассчитывается отдельно после согласования.</i>' },
   confirm: { key: 'confirm', type: 'buttons', next: 'done', prompt: '',
     buttons: [
       [{ text: '✅ Сделать КП',  data: 'w:confirm:yes' }],
@@ -272,29 +276,31 @@ function formatSummary(c: Collected): string {
   const claddingLab = CLADDINGS.find(x => x.id === c.cladding)?.label ?? c.cladding ?? '—';
   const roofingLab  = ROOFINGS.find(x => x.id === c.roofing)?.label ?? c.roofing ?? '—';
   const fndLabel    = FOUNDATIONS.find(x => x.id === c.foundation)?.label ?? c.foundation ?? '—';
-  const logLabel    = c.logistics_add ? (LOGISTICS.find(x => x.id === c.logistics_dest)?.label ?? 'указано') : 'не нужно';
+  const regionLabel = REGIONS_BOT[c.region ?? 'krsk_city'] ?? 'Красноярск';
   const fmtItems = (items?: { size: string; count: number }[]) =>
     items && items.length ? items.map(i => `${i.count} × ${i.size}`).join(', ') : 'нет';
   const fmtRub = (n: number) => new Intl.NumberFormat('ru-RU').format(Math.round(n)) + ' ₽';
   const { lines, total, low, high } = calcEstimate(c);
+  const thkSuffix = c.cladding_thk ? ` ${c.cladding_thk}мм` : '';
   let msg = `<b>📋 РЕЗЮМЕ КП</b>\n\n`;
   msg += `<b>Клиент:</b> ${c.client_name ?? '—'}\n`;
-  msg += `<b>Телефон:</b> <code>${c.phone ?? '—'}</code>\n\n`;
+  msg += `<b>Телефон:</b> <code>${c.phone ?? '—'}</code>\n`;
+  msg += `<b>Регион:</b> ${regionLabel}\n\n`;
   msg += `<b>Объект:</b> ${objLabel} ${c.length}×${c.width}×${c.height} м (${area} м²)\n`;
   msg += `<b>Каркас:</b> ${frameLabel}\n`;
-  msg += `<b>Стены:</b> ${claddingLab} (${wallArea.toFixed(0)} м²)\n`;
-  msg += `<b>Кровля:</b> ${roofingLab}\n`;
+  msg += `<b>Стены:</b> ${claddingLab}${thkSuffix} (${wallArea.toFixed(0)} м²)\n`;
+  msg += `<b>Кровля:</b> ${roofingLab}${thkSuffix}\n`;
   msg += `<b>Фундамент:</b> ${fndLabel}\n\n`;
   msg += `<b>Доборные:</b>\n`;
   msg += `• Ворота: ${fmtItems(c.gates)}\n`;
   msg += `• Окна: ${fmtItems(c.windows)}\n`;
-  msg += `• Двери: ${c.doors?.count ? c.doors.count + ' шт' : 'нет'}\n\n`;
-  msg += `<b>Логистика:</b> ${logLabel}\n`;
+  msg += `• Двери: ${c.doors?.count ? c.doors.count + ' шт' : 'нет'}\n`;
   if (c.notes) msg += `\n<i>Примечание: ${c.notes}</i>\n`;
-  msg += `\n<b>📊 СМЕТА</b>\n`;
+  msg += `\n<b>📊 СМЕТА (предварительная)</b>\n`;
   for (const line of lines) msg += `${line.label}: <code>${fmtRub(line.value)}</code>\n`;
   msg += `\n<b>ИТОГО:</b> <b>${fmtRub(total)}</b>\n`;
   msg += `<i>Диапазон: ${fmtRub(low)} — ${fmtRub(high)}</i>\n`;
+  msg += `\n<i>⚠️ Логистика рассчитывается отдельно после согласования.</i>\n`;
   return msg;
 }
 
@@ -871,7 +877,7 @@ async function handleWizardText(chatId: number, text: string): Promise<boolean> 
         }
         count = n;
       }
-      await saveAndAdvance(chatId, session, "doors", { count }, "logistics_choice");
+      await saveAndAdvance(chatId, session, "doors", { count }, "notes");
       return true;
     }
     case "notes": {
@@ -880,13 +886,13 @@ async function handleWizardText(chatId: number, text: string): Promise<boolean> 
       await saveAndAdvance(chatId, session, "notes", value, "confirm");
       return true;
     }
+    case "region":
     case "object_type":
     case "frame":
     case "cladding":
+    case "cladding_thk":
     case "roofing":
     case "foundation":
-    case "logistics_choice":
-    case "logistics_dest":
     case "confirm":
       await sendMessage(chatId, "Здесь нужно нажать кнопку выше ↑");
       return true;
@@ -929,39 +935,19 @@ async function handleWizardCallback(cb: any) {
     }
   }
 
-  // Логистика — особый случай
-  if (field === "logistics_choice") {
-    if (value === "yes") {
-      await answerCallback(cb.id, "Куда?");
-      await supabase.from("kp_sessions")
-        .update({ collected: { ...session.collected, logistics_add: true }, current_step: "logistics_dest", updated_at: new Date().toISOString() })
-        .eq("id", session.id);
-      await askStep(chatId, "logistics_dest", session.id);
-      return;
-    } else {
-      // Без доставки — сразу к notes
-      await saveAndAdvance(chatId, { ...session, collected: { ...session.collected, logistics_add: false } }, "logistics_add", false, "notes");
-      await answerCallback(cb.id, "Без доставки");
+  // Толщина сэндвича — числовое значение
+  if (field === "cladding_thk") {
+    const thk = parseInt(value, 10);
+    if (isNaN(thk)) {
+      await answerCallback(cb.id, "Не понял толщину");
       return;
     }
-  }
-
-  if (field === "logistics_dest") {
-    const dest = LOGISTICS.find(l => l.id === value);
-    if (!dest) {
-      await answerCallback(cb.id, "Не понял направление");
-      return;
-    }
-    const collected = { ...session.collected, logistics_dest: value, logistics_amount: dest.amount };
-    await supabase.from("kp_sessions")
-      .update({ collected, current_step: "notes", updated_at: new Date().toISOString() })
-      .eq("id", session.id);
-    await answerCallback(cb.id, dest.label);
-    await askStep(chatId, "notes", session.id);
+    await answerCallback(cb.id, `${thk} мм`);
+    await saveAndAdvance(chatId, session, "cladding_thk", thk, "roofing");
     return;
   }
 
-  // Обычные buttons-поля (object_type / frame / cladding / roofing / foundation)
+  // Обычные buttons-поля (object_type / region / frame / cladding / roofing / foundation)
   const stepKey = session.current_step as StepKey;
   const step = STEPS[stepKey];
   if (!step || step.type !== "buttons") {
@@ -1004,7 +990,7 @@ async function finalizeKpAndCreateLead(chatId: number, session: any) {
 
   const noteParts: string[] = [];
   if (c.notes) noteParts.push(c.notes);
-  if (c.logistics_add && c.logistics_dest === "other") noteParts.push("Логистика: уточнить направление и стоимость");
+  noteParts.push("Логистика: рассчитывается отдельно по запросу");
 
   const { data: lead, error } = await supabase
     .from("leads")
@@ -1062,22 +1048,22 @@ function mapCollectedToInput(c: Collected): any {
   const foundation = foundationMap[c.foundation ?? "none"] ?? "none";
 
   // bot's object_type — некоторые объекты добавляем
+  const thk = c.cladding_thk;
   return {
+    region:     c.region ?? "krsk_city",
     objectType: c.object_type ?? "sklad",
     length:     c.length ?? 0,
     width:      c.width  ?? 0,
     height:     c.height ?? 0,
     frame:      c.frame ?? "metal",
     cladding,
-    claddingThk: cladding.startsWith("sandwich") ? 150 : undefined,
+    claddingThk: cladding.startsWith("sandwich") ? (thk ?? 150) : undefined,
     roofing:    roofingMapped,
-    roofingThk: roofingMapped.startsWith("sandwich") ? 150 : undefined,
+    roofingThk: roofingMapped.startsWith("sandwich") ? (thk ?? 150) : undefined,
     foundation,
     gates:      c.gates ?? [],
     windows:    c.windows ?? [],
     doors:      { count: c.doors?.count ?? 0 },
-    logisticsAdd:  c.logistics_add,
-    logisticsDest: c.logistics_dest,
     notes:      c.notes,
   };
 }

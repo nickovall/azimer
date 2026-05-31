@@ -5,29 +5,39 @@ import type { BuildingInput, Estimate, LineItem, EstimateTotals } from "./types"
 import { CATALOG_VERSION, FINANCE } from "./catalog";
 import { classify } from "./classifier";
 import { computeGeometry, round } from "./geometry";
+import { getRegion, isWinterPeriod } from "./regions";
 
 import { calculateWalls }      from "./modules/walls";
 import { calculateRoof }       from "./modules/roof";
 import { calculateFrame, detectInsulation } from "./modules/frame";
 import { calculateFoundation } from "./modules/foundation";
 import { calculateOpenings }   from "./modules/openings";
-import { calculateLogistics }  from "./modules/logistics";
 
 export function calculate(input: BuildingInput): Estimate {
+  // 0. Подставляем параметры региона в Input (если не заданы явно)
+  const region = getRegion(input.region);
+  const enrichedInput: BuildingInput = {
+    ...input,
+    snowZone:     input.snowZone     ?? region.snowZone,
+    windZone:     input.windZone     ?? region.windZone,
+    seismicLevel: input.seismicLevel ?? region.seismicLevel,
+  };
+
   // 1. Классификация
-  const cls = classify(input);
+  const cls = classify(enrichedInput);
 
   // 2. Геометрия
-  const geo = computeGeometry(input);
+  const geo = computeGeometry(enrichedInput);
+  // Используем enriched всюду ниже
+  input = enrichedInput;
 
-  // 3. Сборка спецификации по модулям
+  // 3. Сборка спецификации по модулям (БЕЗ логистики — её Азамат считает отдельно)
   const lines: LineItem[] = [
     ...calculateFoundation(input, geo),
     ...calculateFrame(input, geo),
     ...calculateWalls(input, geo),
     ...calculateRoof(input, geo),
     ...calculateOpenings(input),
-    ...calculateLogistics(input),
   ];
 
   // 3.1. Для холодных объектов — снижаем работы и накладные
@@ -42,12 +52,21 @@ export function calculate(input: BuildingInput): Estimate {
     A >= 500  ? 0.90 :   // -10%
                 1.0;
 
-  // 4. Итоги — холодный ангар: меньше работ (×0.70), меньше НР+СП, меньше наценка клиенту
+  // 3.3. Зимняя надбавка к работам (обогрев бетона, доплата за холод дек-март)
+  // Применяется ТОЛЬКО если строительство в зимний период ИЛИ region.winterSurchargePct
+  // высокий (для регионов где зима почти круглый год — Норильск, Эвенкия)
+  const winterMul = region.permafrost
+    ? 1 + region.winterSurchargePct           // мерзлота — всегда применяем
+    : isWinterPeriod()
+      ? 1 + region.winterSurchargePct
+      : 1.0;
+
+  // 4. Итоги
   const totals = computeTotals(lines, {
-    worksMultiplier:  isCold ? 0.70 : 1.0,
+    worksMultiplier:  (isCold ? 0.70 : 1.0) * winterMul,
     finalMultiplier:  volumeMultiplier,
-    overheadMultiplier: isCold ? 0.50 : 1.0,  // для холодного — упрощённая смета
-    markupOverride:     isCold ? 0.10 : undefined,  // 10% наценка вместо 20%
+    overheadMultiplier: isCold ? 0.50 : 1.0,
+    markupOverride:     isCold ? 0.10 : undefined,
   });
 
   return {

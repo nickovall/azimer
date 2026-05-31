@@ -23,6 +23,10 @@ export type LogisticsDest = "krasnoyarsk" | "hakasia" | "kemerovo" | "irkutsk" |
 export type PlanShape = "rectangle" | "L_shape" | "U_shape" | "custom";
 
 export interface BuildingInput {
+  // География (определяет снег/ветер/сейсмику/мерзлоту/зимнюю надбавку)
+  // ID из lib/calculator/regions.ts. Default = "krsk_city"
+  region?:      string;
+
   // Базовые параметры (Wizard уровень 1)
   objectType:   ObjectType;
   length:       number;             // м
