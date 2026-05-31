@@ -99,7 +99,7 @@ function AdminLeadViewPage() {
       <div className="rounded-2xl border border-red-300 bg-red-50 p-6 text-sm text-red-800">
         ❌ {error}
         <div className="mt-3">
-          <Link href="/admin/leads" className="text-xs text-orange hover:underline">
+          <Link href="/console-x9p4m2/leads" className="text-xs text-orange hover:underline">
             ← К списку
           </Link>
         </div>
@@ -115,7 +115,7 @@ function AdminLeadViewPage() {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <Link href="/admin/leads" className="text-xs text-orange hover:underline">
+        <Link href="/console-x9p4m2/leads" className="text-xs text-orange hover:underline">
           ← К списку
         </Link>
         <span className="font-mono text-xs text-graphite-900/30">{lead.id}</span>

@@ -182,7 +182,7 @@ export default function AdminLeadsListPage() {
                   </td>
                   <td className="px-4 py-2.5 text-right">
                     <Link
-                      href={`/admin/leads/view?id=${lead.id}`}
+                      href={`/console-x9p4m2/leads/view?id=${lead.id}`}
                       className="text-xs text-orange hover:underline whitespace-nowrap"
                     >
                       Открыть →
