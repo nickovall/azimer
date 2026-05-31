@@ -140,7 +140,7 @@ export default function AdminDashboardPage() {
           <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-900/60">
             Последние заявки
           </h2>
-          <Link href="/console-x9p4m2/leads" className="text-xs text-orange hover:underline">
+          <Link href="/console-x9p4m2/leads/" className="text-xs text-orange hover:underline">
             Все заявки →
           </Link>
         </header>
@@ -166,7 +166,7 @@ export default function AdminDashboardPage() {
                   <td className="px-2 py-2.5 font-mono text-xs text-graphite-900/70">{lead.phone}</td>
                   <td className="px-5 py-2.5 text-right">
                     <Link
-                      href={`/console-x9p4m2/leads/view?id=${lead.id}`}
+                      href={`/console-x9p4m2/leads/view/?id=${lead.id}`}
                       className="text-xs text-orange hover:underline"
                     >
                       Открыть →
