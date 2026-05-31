@@ -13,7 +13,7 @@ export const PUBLISHABLE_KEY =
   ?? "";
 
 export type LeadStatus = "new" | "contacted" | "kp_sent" | "won" | "lost";
-export type LeadSource = "contact" | "project" | "partner" | "estimate";
+export type LeadSource = "contact" | "project" | "partner" | "estimate" | "kp_bot";
 
 export interface LeadRow {
   id: string;
@@ -83,6 +83,7 @@ export const SOURCE_LABEL: Record<LeadSource, string> = {
   project:  "📐 Проект",
   partner:  "🤝 Партнёрство",
   estimate: "🧮 Мастер расчёта",
+  kp_bot:   "💬 Telegram-бот",
 };
 
 export async function adminFetch<T = unknown>(

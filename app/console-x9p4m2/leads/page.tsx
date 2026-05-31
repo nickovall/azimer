@@ -17,7 +17,7 @@ import {
 
 const PAGE_SIZE = 50;
 const STATUS_OPTIONS: LeadStatus[] = ["new", "contacted", "kp_sent", "won", "lost"];
-const SOURCE_OPTIONS: LeadSource[] = ["contact", "project", "estimate", "partner"];
+const SOURCE_OPTIONS: LeadSource[] = ["contact", "project", "estimate", "partner", "kp_bot"];
 
 export default function AdminLeadsListPage() {
   const { password } = useAdmin();
