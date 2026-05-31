@@ -45,3 +45,6 @@ next-env.d.ts
 
 # supabase scratch
 /supabase/.temp/
+
+# Claude Code local tooling
+/.claude/
