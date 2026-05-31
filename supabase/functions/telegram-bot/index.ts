@@ -137,7 +137,12 @@ function calcEstimate(c: Collected) {
     lines.push({ label: `Подкрановые балки + усиление под кран ${craneT}т`, value: craneCost });
   }
 
-  const total = lines.reduce((sum, l) => sum + l.value, 0);
+  let total = lines.reduce((sum, l) => sum + l.value, 0);
+  // Эконом-линейка: арочный тент-каркас в 3 раза дешевле
+  if (c.object_type === "tent_arched") {
+    total *= 0.33;
+    for (const l of lines) l.value *= 0.33;
+  }
   const low  = Math.round((total * 0.9)  / 1000) * 1000;
   const high = Math.round((total * 1.15) / 1000) * 1000;
   return { lines, total, low, high };
@@ -212,11 +217,12 @@ const STEPS: Record<StepKey, Step> = {
       [{ text: 'Тува / Кемерово / Иркутск',  data: 'w:region:other' }],
     ] },
   object_type: { key: 'object_type', type: 'buttons', next: 'length',
-    prompt: '4/14  <b>Тип объекта:</b>',
+    prompt: '4/15  <b>Тип объекта:</b>',
     buttons: [
       [{ text: 'Склад',        data: 'w:object_type:sklad' },      { text: 'Ангар',        data: 'w:object_type:angar' }],
       [{ text: 'Производство', data: 'w:object_type:production' }, { text: 'Коммерческое', data: 'w:object_type:commercial' }],
       [{ text: 'Навес',        data: 'w:object_type:naves' },      { text: 'Модульное',    data: 'w:object_type:modular' }],
+      [{ text: '🏕 Арочный тент (эконом-линейка)', data: 'w:object_type:tent_arched' }],
     ] },
   length: { key: 'length', type: 'numeric', next: 'width',
     prompt: '5/14  <b>Длина в метрах:</b>\nПример: 18' },

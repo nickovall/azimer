@@ -13,6 +13,10 @@ import { calculateFrame, detectInsulation } from "./modules/frame";
 import { calculateFoundation } from "./modules/foundation";
 import { calculateOpenings }   from "./modules/openings";
 
+// Множитель эконом-линейки (арочный тент-каркас)
+// Конструктив на 60-70% легче полноценного каркаса, без серьёзного фундамента
+const ECONOMY_TENT_MULTIPLIER = 0.33;
+
 export function calculate(input: BuildingInput): Estimate {
   // 0. Подставляем параметры региона в Input (если не заданы явно)
   const region = getRegion(input.region);
@@ -46,11 +50,16 @@ export function calculate(input: BuildingInput): Estimate {
 
   // 3.2. Скидка от объёма (рыночный паттерн: МС-Ангар, АМС-МК, СтройСибМонтаж)
   const A = geo.floorArea;
-  const volumeMultiplier =
+  let volumeMultiplier =
     A >= 1500 ? 0.80 :   // -20%
     A >= 800  ? 0.85 :   // -15%
     A >= 500  ? 0.90 :   // -10%
                 1.0;
+
+  // 3.2b. Эконом-линейка — арочный тент-каркас в 3 раза дешевле
+  if (input.objectType === "tent_arched") {
+    volumeMultiplier *= ECONOMY_TENT_MULTIPLIER;
+  }
 
   // 3.3. Зимняя надбавка к работам (обогрев бетона, доплата за холод дек-март)
   // Применяется ТОЛЬКО если строительство в зимний период ИЛИ region.winterSurchargePct

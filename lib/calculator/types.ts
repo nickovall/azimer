@@ -4,7 +4,8 @@
 // ────────────────── ВХОД (что вводит клиент/Азамат) ──────────────────
 
 export type ObjectType =
-  | "sklad" | "angar" | "production" | "commercial" | "naves" | "modular" | "residential";
+  | "sklad" | "angar" | "production" | "commercial" | "naves" | "modular" | "residential"
+  | "tent_arched";  // эконом-линейка: арочный тент-каркас
 
 export type FrameType = "lstk" | "metal" | "modular";
 
