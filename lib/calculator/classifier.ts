@@ -2,6 +2,7 @@
 // Определяет: типовой / расширенный / нужен инженер
 
 import type { BuildingInput, Complexity, ComplexityFlag } from "./types";
+import { getRegion } from "./regions";
 
 export interface Classification {
   complexity: Complexity;
@@ -12,13 +13,17 @@ export interface Classification {
 // Какие флаги считаются "блокерами" — сразу требуется инженер
 const BLOCKING_FLAGS: ComplexityFlag[] = [
   "non_rectangular",   // Г/U-образное — нужен индивидуальный расчёт узлов
+  "overhead_crane",    // крановые нагрузки считаются по паспорту крана и группе режима
   "extreme_snow",      // VI+ зона
+  "high_seismic",      // 8+ баллов
+  "permafrost",        // мерзлота — только после геологии/оснований
   "tall_rack",         // стеллажи > 10м — особый расчёт пола и нагрузок
 ];
 
 export function classify(input: BuildingInput): Classification {
   const flags: ComplexityFlag[] = [];
   const reasons: string[] = [];
+  const region = getRegion(input.region);
 
   // Пролёт — если ширина больше 12м И только 1 пролёт
   const spanCount = input.spanCount ?? 1;
@@ -64,16 +69,26 @@ export function classify(input: BuildingInput): Classification {
     reasons.push(`Высота карниза ${input.height}м (>10м)`);
   }
 
-  // Экстремальный снег (V+ район по СП 20.13330)
-  if ((input.snowZone ?? 3) >= 6) {
+  // Экстремальный снег: север края и точечные значения табл. К.1 СП 20.
+  const snowLoadKPa = input.snowLoadKPa ?? region.snowLoadKPa;
+  if ((input.snowZone ?? region.snowZone) >= 6 || snowLoadKPa >= 2.4) {
     flags.push("extreme_snow");
-    reasons.push(`Снеговая зона ${input.snowZone} — высокая нагрузка на каркас`);
+    reasons.push(`Снеговая нагрузка Sg ${snowLoadKPa.toFixed(2)} кПа — нужна проверка КМ`);
   }
 
   // Сейсмика
   if ((input.seismicLevel ?? 6) >= 7) {
     flags.push("seismic");
     reasons.push(`Сейсмика ${input.seismicLevel} баллов — специальные узлы`);
+  }
+  if ((input.seismicLevel ?? 6) >= 8) {
+    flags.push("high_seismic");
+    reasons.push(`Сейсмика ${input.seismicLevel} баллов — нужен расчёт по СП 14`);
+  }
+
+  if (region.permafrost) {
+    flags.push("permafrost");
+    reasons.push("Вечная мерзлота — фундамент только по геологии и теплотехнике грунтов");
   }
 
   // Толстое утепление

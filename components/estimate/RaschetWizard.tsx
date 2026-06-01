@@ -5,6 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   objectTypes,
+  regionTypes,
   frameTypes,
   claddingTypes,
   roofingTypes,
@@ -32,6 +33,7 @@ const EASE = [0.22, 1, 0.36, 1] as const;
 
 type StepId =
   | "object"
+  | "region"
   | "frame"
   | "size"
   | "cladding"
@@ -42,6 +44,7 @@ type StepId =
 
 const STEP_TITLES: Record<StepId, string> = {
   object: "Тип объекта",
+  region: "Регион строительства",
   frame: "Тип каркаса",
   size: "Размеры здания",
   cladding: "Стеновое ограждение",
@@ -195,9 +198,10 @@ export default function RaschetWizard() {
 
   const steps: StepId[] =
     state.frame === "modular"
-      ? ["object", "frame", "size", "foundation", "options", "result"]
+      ? ["object", "region", "frame", "size", "foundation", "options", "result"]
       : [
           "object",
+          "region",
           "frame",
           "size",
           "cladding",
@@ -219,6 +223,8 @@ export default function RaschetWizard() {
     switch (current) {
       case "object":
         return !!state.objectType;
+      case "region":
+        return !!state.region;
       case "frame":
         return !!state.frame;
       case "size":
@@ -318,6 +324,19 @@ export default function RaschetWizard() {
                   options={objectTypes}
                   value={state.objectType}
                   onSelect={(id) => set({ objectType: id })}
+                />
+              </div>
+            )}
+
+            {current === "region" && (
+              <div className="mt-6">
+                <p className="mb-4 text-sm leading-relaxed text-graphite-900/60">
+                  Регион влияет на снеговые и ветровые нагрузки, сейсмику, тип фундамента и зимнюю надбавку к работам.
+                </p>
+                <CardGrid
+                  options={regionTypes}
+                  value={state.region}
+                  onSelect={(id) => set({ region: id })}
                 />
               </div>
             )}
@@ -446,6 +465,18 @@ export default function RaschetWizard() {
                   стоимость зависит от снеговых и ветровых нагрузок, рельефа,
                   удалённости объекта и фиксируется в коммерческом предложении.
                 </p>
+
+                {estimate.complexity !== "TYPICAL" && (
+                  <div className="mt-4 rounded-xl border border-orange/25 bg-orange/[0.06] px-4 py-3 text-sm leading-relaxed text-graphite-900/75">
+                    <span className="font-semibold text-graphite-900">
+                      {estimate.complexity === "ENGINEER_REQUIRED"
+                        ? "Нужна проверка инженера-конструктора."
+                        : "Расширенный расчёт."}
+                    </span>{" "}
+                    Вилка ниже остаётся ориентиром для разговора, но финальную
+                    цену нельзя фиксировать без проверки нагрузок и узлов.
+                  </div>
+                )}
 
                 <div className="mt-5">
                   <KpDownloadButton

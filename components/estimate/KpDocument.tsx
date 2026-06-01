@@ -9,6 +9,7 @@ import {
 } from "@react-pdf/renderer";
 import {
   objectTypes,
+  regionTypes,
   frameTypes,
   claddingTypes,
   roofingTypes,
@@ -152,6 +153,7 @@ export default function KpDocument({
 
   const params: [string, string][] = [
     ["Тип объекта", labelOf(objectTypes, state.objectType)],
+    ["Регион строительства", labelOf(regionTypes, state.region)],
     ["Тип каркаса", labelOf(frameTypes, state.frame)],
     [
       "Размеры (Д × Ш × В)",
@@ -216,6 +218,17 @@ export default function KpDocument({
             {formatRub(estimate.low)} — {formatRub(estimate.high)}
           </Text>
         </View>
+
+        {estimate.complexity !== "TYPICAL" ? (
+          <View style={styles.disclaimer}>
+            <Text>
+              Объект требует проверки инженером-конструктором: региональные
+              нагрузки, крановое оборудование, сейсмика, мерзлота или иные
+              факторы могут изменить сечения и фундамент. Указанная стоимость
+              является ориентиром до расчёта КМ/КЖ.
+            </Text>
+          </View>
+        ) : null}
 
         {/* Дисклеймер */}
         <View style={styles.disclaimer}>

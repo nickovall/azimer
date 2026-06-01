@@ -24,6 +24,8 @@ export function calculate(input: BuildingInput): Estimate {
     ...input,
     snowZone:     input.snowZone     ?? region.snowZone,
     windZone:     input.windZone     ?? region.windZone,
+    snowLoadKPa:  input.snowLoadKPa  ?? region.snowLoadKPa,
+    windPressureKPa: input.windPressureKPa ?? region.windPressureKPa,
     seismicLevel: input.seismicLevel ?? region.seismicLevel,
   };
 

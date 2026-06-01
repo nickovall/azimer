@@ -50,10 +50,24 @@ function computeSteelMassKg(input: BuildingInput, geo: Geometry, type: "lstk" | 
   const table = type === "lstk" ? FRAME_NORMS.lstk_base_kg_per_m2 : FRAME_NORMS.metal_base_kg_per_m2;
   let kgPerM2 = pickBaseKgM2(input, geo, table);
 
-  // Поправки
+  // Поправки по климату.
+  // Базовая калибровка сделана под Красноярск: Sg≈1.35 кПа, w0≈0.23 кПа.
   const snowZone    = (input.snowZone    ?? 3) as keyof typeof FRAME_NORMS.k_snow_zone;
+  const windZone    = (input.windZone    ?? 1) as keyof typeof FRAME_NORMS.wind_pressure_kpa;
   const seismicLvl  = (input.seismicLevel ?? 6) as keyof typeof FRAME_NORMS.k_seismic;
-  kgPerM2 *= FRAME_NORMS.k_snow_zone[snowZone] ?? 1.0;
+
+  const snowLoadKPa = input.snowLoadKPa;
+  const snowFactor = snowLoadKPa
+    ? Math.max(0.80, snowLoadKPa / 1.35)
+    : (FRAME_NORMS.k_snow_zone[snowZone] ?? 1.0);
+  kgPerM2 *= snowFactor;
+
+  const windPressureKPa = input.windPressureKPa ?? FRAME_NORMS.wind_pressure_kpa[windZone] ?? 0.23;
+  const windRatio = windPressureKPa / 0.23;
+  // Для зданий 3-6 м ветер влияет в основном на колонны/связи; выше 6 м влияние растёт.
+  const windSensitivity = Math.min(0.35, 0.08 + Math.max(0, input.height - 6) * 0.015);
+  kgPerM2 *= 1 + Math.max(0, windRatio - 1) * windSensitivity;
+
   kgPerM2 *= FRAME_NORMS.k_seismic[seismicLvl]  ?? 1.0;
 
   // Высота сверх 6м

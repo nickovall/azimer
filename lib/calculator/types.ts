@@ -61,6 +61,8 @@ export interface BuildingInput {
   // Регион / климат (default Красноярск)
   snowZone?:    1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;  // СП 20.13330: для Красноярска = III (тут 3)
   windZone?:    1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;  // для Красноярска = III
+  snowLoadKPa?: number;                          // Sg из СП 20, табл. К.1/10.1, кПа
+  windPressureKPa?: number;                      // w0 из СП 20, табл. 11.1, кПа
   seismicLevel?: 5 | 6 | 7 | 8 | 9;             // баллы
   soilType?:    SoilType;
 
@@ -110,6 +112,8 @@ export type ComplexityFlag =
   | "high_walls"          // высота > 10м
   | "extreme_snow"        // снег > 240 кг/м² (VI+)
   | "seismic"             // 7+ баллов
+  | "high_seismic"        // 8+ баллов
+  | "permafrost"          // вечная мерзлота
   | "heavy_insulation"   // сэндвич > 200мм
   | "tall_rack";          // стеллажи > 6м
 

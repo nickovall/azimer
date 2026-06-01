@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Container from "@/components/ui/Container";
-import { calculate, groupLinesByGroup, groupLabel, formatRub } from "@/lib/calculator";
+import { calculate, groupLinesByGroup, groupLabel, formatRub, getRegion } from "@/lib/calculator";
 import type { BuildingInput, Estimate } from "@/lib/calculator/types";
 
 // Декодирование данных из URL (#data=base64)
@@ -99,6 +99,7 @@ export default function KpPage() {
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-orange">Параметры объекта</p>
           <div className="mt-4 grid gap-4 md:grid-cols-3">
             <Field label="Тип объекта" value={objectTypeLabel(estimate.input.objectType)} />
+            <Field label="Регион" value={getRegion(estimate.input.region).label} />
             <Field label="Размеры (Д×Ш×В)" value={`${estimate.input.length} × ${estimate.input.width} × ${estimate.input.height} м`} />
             <Field label="Площадь" value={`${estimate.metadata.floorArea} м²`} />
             <Field label="Каркас" value={frameLabel(estimate.input.frame)} />
@@ -187,6 +188,19 @@ export default function KpPage() {
           </div>
         </div>
 
+        {estimate.complexity !== "TYPICAL" && (
+          <div className="mt-6 rounded-2xl border-l-4 border-orange bg-orange/5 p-5 text-sm leading-relaxed text-graphite-900/75">
+            <p className="font-semibold text-graphite-900">
+              Требуется инженерная проверка перед фиксацией цены
+            </p>
+            <p className="mt-2">
+              Обнаружены факторы: {estimate.flags.map(flagLabel).join(", ")}.
+              Для таких объектов итоговая сумма является ориентиром до проверки
+              КМ/КЖ, основания и региональных нагрузок.
+            </p>
+          </div>
+        )}
+
         {/* ─────────── Что входит / не входит ─────────── */}
         <div className="mt-8 grid gap-4 md:grid-cols-2">
           {/* Включено */}
@@ -222,7 +236,11 @@ export default function KpPage() {
         <div className="mt-6 rounded-2xl border-l-4 border-orange bg-orange/5 p-5 text-sm leading-relaxed text-graphite-900/70">
           <p className="font-semibold text-graphite-900">⚠️ Важно:</p>
           <p className="mt-2">
-            Расчёт предварительный, точность <strong>±10%</strong> для типовых объектов.
+            Расчёт предварительный{estimate.complexity === "TYPICAL" ? (
+              <> с точностью <strong>±10%</strong> для типовых объектов</>
+            ) : (
+              <> и требует инженерной проверки перед фиксацией бюджета</>
+            )}.
             Финальная цена утверждается после технического обследования объекта,
             уточнения геологии и согласования спецификации материалов.
             Срок действия КП: <strong>14 рабочих дней</strong> с даты выдачи.
@@ -297,6 +315,22 @@ const roofingLabel = (r: string) => ({
 const foundationLabel = (f: string) => ({
   none: "Без фундамента", pile_screw: "Свайно-винтовой", pile_grillage: "Свайно-ростверковый",
   strip: "Ленточный", slab_200: "Плита 200мм", slab_300: "Плита 300мм",
+}[f] ?? f);
+
+const flagLabel = (f: string) => ({
+  large_span: "большой пролёт",
+  multi_span: "несколько пролётов",
+  overhead_crane: "мостовой кран",
+  mezzanine: "антресоль",
+  non_rectangular: "сложная форма плана",
+  large_column_step: "увеличенный шаг колонн",
+  high_walls: "высокие стены",
+  extreme_snow: "повышенная снеговая нагрузка",
+  seismic: "сейсмика",
+  high_seismic: "сейсмика 8+",
+  permafrost: "вечная мерзлота",
+  heavy_insulation: "тяжёлое утепление",
+  tall_rack: "высокие стеллажи",
 }[f] ?? f);
 
 // ─────────── Что входит / не входит ───────────

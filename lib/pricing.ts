@@ -12,6 +12,23 @@ export type OptionCard = {
   rate?: number;
 };
 
+// Регионы строительства — влияют на снеговые/ветровые нагрузки, сейсмику, мерзлоту, зимнюю надбавку.
+// Данные из lib/calculator/regions.ts
+export const regionTypes: OptionCard[] = [
+  { id: "krsk_city",     label: "Красноярск и пригороды", desc: "Sg≈1,35 кПа, ветровой район I. Базовый расчёт" },
+  { id: "krsk_south",    label: "Юг края / Хакасия",     desc: "Сейсмика 7 баллов — усиленные узлы каркаса" },
+  { id: "krsk_kansk",    label: "Канск / Ачинск",        desc: "Sg до 1,25 кПа. Конкретную площадку уточняем" },
+  { id: "krsk_north_pre",label: "Лесосибирск / Енисейск", desc: "Север края: повышенный снег и зимний коэффициент" },
+  { id: "krsk_priangar", label: "Богучаны / Кодинск",    desc: "Приангарье: ориентир Sg≈2,0 кПа" },
+  { id: "krsk_evenkia",  label: "Эвенкия (мерзлота)",    desc: "Инженерная проверка: мерзлота и северный климат" },
+  { id: "krsk_taymyr",   label: "Таймыр / Норильск",     desc: "Инженерная проверка: Sg≈2,4 кПа, ветер и мерзлота" },
+  { id: "tuva",          label: "Тува",                   desc: "Инженерная проверка: сейсмика 8 баллов" },
+  { id: "kemerovo",      label: "Кемеровская область",    desc: "Ориентир Sg≈1,8 кПа, зависит от города" },
+  { id: "irkutsk",       label: "Иркутская область",      desc: "III снеговая зона" },
+  { id: "altai",         label: "Алтай",                  desc: "Юг Сибири, мягкие зимы" },
+  { id: "other",         label: "Другое направление",     desc: "Параметры уточняются индивидуально" },
+];
+
 export const objectTypes: OptionCard[] = [
   { id: "sklad", label: "Склад", desc: "Хранение товаров, материалов, техники" },
   { id: "angar", label: "Ангар", desc: "Техника, оборудование, производство" },
@@ -38,7 +55,7 @@ export const frameTypes: OptionCard[] = [
 export const claddingTypes: OptionCard[] = [
   { id: "none", label: "Без стен", desc: "Открытый навес", rate: 0 },
   { id: "proflist", label: "Профлист", desc: "Эконом, неотапливаемые здания", rate: 850 },
-  { id: "sandwich_minvata", label: "Сэндвич минвата 150мм", desc: "Утеплённые здания, стандарт", rate: 3900 },
+  { id: "sandwich_minvata", label: "Сэндвич минвата 150мм", desc: "Утеплённые здания, стандарт", rate: 4100 },
   { id: "sandwich_pir", label: "Сэндвич PIR 150мм", desc: "Премиум теплоизоляция", rate: 4600 },
 ];
 
@@ -46,7 +63,7 @@ export const claddingTypes: OptionCard[] = [
 // Сэндвич 150мм минвата = 3331 (материал Азамат) + 710 (монтаж) + ~60 (фасон) ≈ 4100.
 export const roofingTypes: OptionCard[] = [
   { id: "proflist", label: "Профлист", desc: "Неотапливаемые здания, бюджет", rate: 950 },
-  { id: "sandwich", label: "Сэндвич-панель 150мм", desc: "Утеплённая кровля минвата", rate: 4100 },
+  { id: "sandwich", label: "Сэндвич-панель 150мм", desc: "Утеплённая кровля минвата", rate: 4500 },
 ];
 
 // Фундамент — за м² пятна застройки, под ключ.
@@ -72,6 +89,7 @@ export const optionItems = [
 
 export type WizardState = {
   objectType: string;
+  region: string;
   frame: string;
   length: number;
   width: number;
@@ -84,6 +102,7 @@ export type WizardState = {
 
 export const initialState: WizardState = {
   objectType: "",
+  region: "",
   frame: "",
   length: 0,
   width: 0,
@@ -101,6 +120,9 @@ export type Estimate = {
   base: number;
   low: number;
   high: number;
+  complexity: "TYPICAL" | "EXTENDED" | "ENGINEER_REQUIRED";
+  flags: string[];
+  regionLabel: string;
 };
 
 // Подключение к новому движку калькулятора v2
@@ -134,6 +156,7 @@ export function calcEstimate(s: WizardState): Estimate {
   // Маппинг wizard state → BuildingInput для нового движка
   const input: BuildingInput = {
     objectType: (s.objectType || "sklad") as BuildingInput["objectType"],
+    region:     s.region || undefined,   // → engine.ts → getRegion(id) → снег/ветер/сейсмика/мерзлота
     length:     s.length,
     width:      s.width,
     height:     s.height,
@@ -151,7 +174,17 @@ export function calcEstimate(s: WizardState): Estimate {
 
   // Если калькулятор не готов посчитать (нулевые размеры) — возвращаем пустое
   if (area <= 0 || s.height <= 0 || !s.frame) {
-    return { area, wallArea, lines: [], base: 0, low: 0, high: 0 };
+    return {
+      area,
+      wallArea,
+      lines: [],
+      base: 0,
+      low: 0,
+      high: 0,
+      complexity: "TYPICAL",
+      flags: [],
+      regionLabel: labelOf(regionTypes, s.region),
+    };
   }
 
   const eng = engineCalculate(input);
@@ -193,6 +226,9 @@ export function calcEstimate(s: WizardState): Estimate {
     base: eng.totals.final,
     low:  eng.totals.low,
     high: eng.totals.high,
+    complexity: eng.complexity,
+    flags: eng.flags,
+    regionLabel: labelOf(regionTypes, s.region),
   };
 }
 
@@ -237,8 +273,16 @@ function _legacyCalcEstimate(s: WizardState): Estimate {
     base,
     low: Math.round((base * 0.9) / 1000) * 1000,
     high: Math.round((base * 1.15) / 1000) * 1000,
+    complexity: "TYPICAL",
+    flags: [],
+    regionLabel: labelOf(regionTypes, s.region),
   };
 }
+
+export const labelOf = (
+  list: { id: string; label: string }[],
+  id: string,
+): string => list.find((x) => x.id === id)?.label ?? "—";
 
 export function formatRub(n: number): string {
   return new Intl.NumberFormat("ru-RU").format(Math.round(n)) + " ₽";

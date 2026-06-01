@@ -15,7 +15,7 @@ export const SANDWICH = {
     80:  2500,
     100: 2700,
     120: 2900,
-    150: 3030,   // ← из реального прайса Азамата
+    150: 3070,   // Красноярск/доставка: MCG 2026 от 3071 ₽/м²
     200: 3700,
     250: 4100,
   },
@@ -29,7 +29,7 @@ export const SANDWICH = {
   roof_minvata: {
     100: 2900,
     120: 3100,
-    150: 3331,   // ← из реального прайса Азамата
+    150: 3510,   // рынок 2026: 2.3-4.4К, берём середину для окрашенной панели
     200: 4000,
     250: 4300,
   },
@@ -46,9 +46,9 @@ export const SANDWICH = {
 
 export const PROFLIST = {
   wall_zinc:    450,
-  wall_painted: 550,
+  wall_painted: 650,
   roof_zinc:    550,
-  roof_painted: 650,
+  roof_painted: 835,
 } as const;
 
 // ────────────────── ФАСОННЫЕ ЭЛЕМЕНТЫ / ДОБОРКА ──────────────────
@@ -86,8 +86,8 @@ export const HARDWARE = {
 // ₽/тонна на 2026-05 — средние по рынку
 
 export const METAL = {
-  iBeam_per_ton:        95000,   // двутавр
-  channel_per_ton:      92000,   // швеллер
+  iBeam_per_ton:        120000,  // двутавр, Красноярск 2026: 120-129 тыс/т
+  channel_per_ton:      115000,  // швеллер
   angle_per_ton:        88000,   // уголок равнополочный
   square_pipe_per_ton:  100000,  // профтруба
   sheet_hr_per_ton:     85000,   // лист горячекатаный
@@ -149,9 +149,9 @@ export const OPENINGS = {
 export const WORKS = {
   // Каркас
   metal_assembly_per_ton:   20000,  // монтаж МК на объекте
-  metal_welding_per_ton:    8000,   // сварочные работы
-  metal_painting_per_ton:   4000,   // покраска МК
-  lstk_assembly_per_ton:    18000,
+  metal_welding_per_ton:    25000,  // изготовление/сварка МК на базе
+  metal_painting_per_ton:   6000,   // покраска МК
+  lstk_assembly_per_ton:    20000,
 
   // Стены
   sandwich_wall_per_m2:     700,    // монтаж сэндвич-стен
