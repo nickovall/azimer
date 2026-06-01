@@ -61,20 +61,24 @@ function computeSteelMassKg(input: BuildingInput, geo: Geometry, type: "lstk" | 
     kgPerM2 *= 1 + (input.height - 6) * FRAME_NORMS.k_height;
   }
 
-  // Кран
-  if ((input.craneCapacityT ?? 0) > 0) {
-    kgPerM2 *= 1 + (input.craneCapacityT! / 20); // +5% за каждую тонну
+  // Кран — нелинейный рост: подкрановые балки + усиленные колонны + тормозные фермы
+  // Кран 5т → +50%, 10т → +100%, 20т → +165%
+  const craneT = input.craneCapacityT ?? 0;
+  if (craneT > 0) {
+    kgPerM2 *= 1 + craneT * 0.07 + (craneT >= 10 ? 0.35 : 0) + (craneT >= 20 ? 0.30 : 0);
   }
 
-  // Многопролётность экономит метал на ~10%
-  if ((input.spanCount ?? 1) > 1) {
-    kgPerM2 *= 0.90;
-  }
+  // Многопролётность — экономия на промежуточных колоннах (по СП 16.13330)
+  // 2 пролёта −5%, 3 −8%, 4+ −12%
+  const spans = input.spanCount ?? 1;
+  if (spans === 2)      kgPerM2 *= 0.95;
+  else if (spans === 3) kgPerM2 *= 0.92;
+  else if (spans >= 4)  kgPerM2 *= 0.88;
 
-  // Холодный ангар — используются лёгкие конструкции (гнутый профиль / прямостен лёгкий)
-  // Расход металла на 55-60% ниже чем у тёплого (по данным рынка АМС-МК, ВелесТент)
+  // Холодный ангар — лёгкие конструкции (гнутый профиль / прямостен лёгкий)
+  // Расход металла на 35-45% ниже чем у тёплого
   if (detectInsulation(input) === "cold") {
-    kgPerM2 *= 0.40;
+    kgPerM2 *= 0.60;
   }
 
   // Надбавки на швы и КМД

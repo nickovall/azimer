@@ -34,22 +34,26 @@ function screwPile(input: BuildingInput, geo: Geometry): LineItem[] {
   const isSwelling = input.soilType === "swelling" || input.soilType === "clay";
   const isHeavyLoad = (input.craneCapacityT ?? 0) > 0 || (input.frame === "metal" && !isCold);
 
-  // Подбор плотности свай по нагрузке и комплектации
-  let density = isCold
-    ? 0.30
-    : isSwelling
-      ? FOUNDATION_NORMS.screw_pile_density_per_m2.swelling
-      : isHeavyLoad
-        ? FOUNDATION_NORMS.screw_pile_density_per_m2.loaded
-        : FOUNDATION_NORMS.screw_pile_density_per_m2.standard;
+  // Расчёт количества свай через сетку колонн (не через площадь!)
+  // Реальность: сваи ставятся по сетке колонн (шаг 4-6 м), под каждую точку 1-2 сваи.
+  // Для 12×24 (288 м²) → ~18-24 сваи, для 7.44×4.60 (34 м²) → ~9-12 свай.
+  // Источник: bvz.su типовой проект 12×24, sibsvai.ru, stroy-svai.ru
+  const pileStep = isCold ? 6.0                  // холодный — лёгкий каркас, шаг колонн 6 м
+    : isSwelling           ? 3.0                  // пучинистые — шаг 3 м (удвоенный)
+    : isHeavyLoad          ? 4.0                  // тяжёлый каркас / кран — шаг 4 м
+    :                        5.0;                 // стандарт — шаг 5 м
 
-  // ВЕЧНАЯ МЕРЗЛОТА — сваи 6-8 метров, плотнее шаг, специальная установка
-  // Стоимость 1 сваи вырастает в 2-2.5 раза, расход на 30% больше
+  const L = Math.max(input.length, input.width);
+  const W = Math.min(input.length, input.width);
+  const cols = Math.max(2, ceil(L / pileStep) + 1);   // точки вдоль длинной стороны
+  const rows = Math.max(2, ceil(W / pileStep) + 1);   // точки вдоль короткой стороны
+  // +30% на промежуточные сваи (под обвязку, прогоны, входные группы)
+  let piles = ceil(cols * rows * 1.30);
+
+  // ВЕЧНАЯ МЕРЗЛОТА — сваи 6-8 метров, плотнее шаг, +30% к количеству
   if (region.permafrost) {
-    density *= 1.30;
+    piles = ceil(piles * 1.30);
   }
-
-  const piles = ceil(geo.floorArea * density);
 
   // Цена и название сваи
   let pileUnit: number;
@@ -72,7 +76,7 @@ function screwPile(input: BuildingInput, geo: Geometry): LineItem[] {
     unit: "шт",
     unitPrice: pileUnit,
     total: round(piles * pileUnit),
-    note: `1 свая на ${(1 / density).toFixed(1)} м² пятна`,
+    note: `Сетка ${cols}×${rows} + запас 30%, шаг ${pileStep} м`,
   });
 
   // Обвязка (швеллер) — для свайно-ростверкового

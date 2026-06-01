@@ -71,11 +71,13 @@ export function calculate(input: BuildingInput): Estimate {
       : 1.0;
 
   // 4. Итоги
+  // Холодный ангар: работы −15% (проще монтаж), НР −25% (меньше обслуживания),
+  // наценка 15% (ниже маржа из-за конкуренции). Металл ×0.60 уже в frame.ts.
   const totals = computeTotals(lines, {
-    worksMultiplier:  (isCold ? 0.70 : 1.0) * winterMul,
-    finalMultiplier:  volumeMultiplier,
-    overheadMultiplier: isCold ? 0.50 : 1.0,
-    markupOverride:     isCold ? 0.10 : undefined,
+    worksMultiplier:    (isCold ? 0.85 : 1.0) * winterMul,
+    finalMultiplier:    volumeMultiplier,
+    overheadMultiplier: isCold ? 0.75 : 1.0,
+    markupOverride:     isCold ? 0.15 : undefined,
   });
 
   return {
