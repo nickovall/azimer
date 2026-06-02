@@ -300,6 +300,12 @@ function AdminLeadViewPage() {
             )}
           </div>
 
+          {lead.catalog_version && (
+            <p className="mt-3 font-mono text-[11px] text-graphite-900/40">
+              Версия каталога: {lead.catalog_version}
+            </p>
+          )}
+
           {/* Параметры объекта (state) */}
           {Object.keys(estState).length > 0 && (
             <details className="mt-4">

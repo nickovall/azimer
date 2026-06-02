@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "gen:catalog": "tsx scripts/build-catalog.mts",
+    "predev": "tsx scripts/build-catalog.mts",
+    "prebuild": "tsx scripts/build-catalog.mts",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -25,6 +28,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "tailwindcss": "^4",
+    "tsx": "^4.22.4",
     "typescript": "^5",
     "wrangler": "^4.94.0"
   }

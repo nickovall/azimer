@@ -33,6 +33,8 @@ export interface LeadInsert {
   utm_term?:     string;
   referrer?:     string;
   landing_page?: string;
+  // Версия каталога цен (CATALOG_VERSION из catalog.generated.ts)
+  catalog_version?: string;
 }
 
 /**

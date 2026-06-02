@@ -123,6 +123,7 @@ export type Estimate = {
   complexity: "TYPICAL" | "EXTENDED" | "ENGINEER_REQUIRED";
   flags: string[];
   regionLabel: string;
+  catalogVersion?: string;
 };
 
 // Подключение к новому движку калькулятора v2
@@ -229,6 +230,7 @@ export function calcEstimate(s: WizardState): Estimate {
     complexity: eng.complexity,
     flags: eng.flags,
     regionLabel: labelOf(regionTypes, s.region),
+    catalogVersion: eng.catalogVersion,
   };
 }
 

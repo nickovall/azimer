@@ -43,6 +43,7 @@ export interface LeadFull extends LeadRow {
   direction: string | null;
   notes: string | null;
   files: string[] | null;
+  catalog_version: string | null;
 }
 
 export interface LeadFileLink {

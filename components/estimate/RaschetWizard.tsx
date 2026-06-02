@@ -546,6 +546,7 @@ export default function RaschetWizard() {
                   phone: contact.phone,
                   object_type: state.objectType || undefined,
                   estimate: { state, ...estimate },
+                  catalog_version: estimate.catalogVersion,
                 });
               } catch (err) {
                 console.error(err);
