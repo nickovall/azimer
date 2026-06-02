@@ -271,7 +271,10 @@ Deno.serve(async (req) => {
     const triggerToken = Deno.env.get("GITLAB_TRIGGER_TOKEN") ?? "";
     const projectId    = Deno.env.get("GITLAB_PROJECT_ID")    ?? "";
     const ref          = (body.ref as string | undefined) ?? "main";
-    const reason       = (body.reason as string | undefined) ?? "manual_rebuild";
+    // body.reason пока не передаём в GitLab — trigger token без явной настройки
+    // "Allow trigger variables" получает 400 на любую кастомную переменную.
+    // Reason достаточно логировать здесь.
+    console.log(`[trigger_rebuild] reason=${body.reason ?? "unspecified"}`);
 
     if (!triggerToken || !projectId) {
       return json({
@@ -283,7 +286,6 @@ Deno.serve(async (req) => {
     const form = new FormData();
     form.append("token", triggerToken);
     form.append("ref", ref);
-    form.append("variables[REBUILD_REASON]", reason);
 
     const r = await fetch(triggerUrl, { method: "POST", body: form });
     const data = await r.json().catch(() => ({}));
