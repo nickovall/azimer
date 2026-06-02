@@ -1,14 +1,15 @@
 // АЗИМЕР — Build-time генератор lib/calculator/catalog.generated.ts
 //
 // Запускается из package.json через prebuild hook.
-// Подключается к Supabase через анон-ключ (public read RLS на catalog_items),
-// читает view catalog_current, собирает TS-файл со структурой 1:1 как catalog.fallback.ts.
+// Дёргает PostgREST напрямую через fetch (анон-ключ, public read RLS на catalog_items).
+// Намеренно НЕ используем @supabase/supabase-js: он тянет realtime-js, который
+// требует native WebSocket (Node 22+); CI на node:20-alpine падает на createClient.
+// Нам всё равно нужен один SELECT — лишнее SDK тут только мешает.
 //
 // Если БД недоступна → fail fast (не молчаливый fallback на старые цены).
 //
 // Запуск вручную: npm run gen:catalog
 
-import { createClient } from "@supabase/supabase-js";
 import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -24,8 +25,6 @@ if (!url || !key) {
   process.exit(1);
 }
 
-const supabase = createClient(url, key, { auth: { persistSession: false } });
-
 interface DbItem {
   category: string;
   key: string;
@@ -36,19 +35,27 @@ interface DbItem {
 }
 
 console.log("→ Fetching catalog_current from Supabase ...");
-const { data, error } = await supabase
-  .from("catalog_current")
-  .select("category, key, label, unit, price, valid_from")
-  .order("category", { ascending: true })
-  .order("key", { ascending: true });
+const restUrl =
+  `${url.replace(/\/$/, "")}/rest/v1/catalog_current` +
+  `?select=category,key,label,unit,price,valid_from` +
+  `&order=category.asc,key.asc`;
 
-if (error) {
-  console.error("✗ Supabase error:", error.message);
+const r = await fetch(restUrl, {
+  headers: {
+    apikey: key,
+    Authorization: `Bearer ${key}`,
+    Accept: "application/json",
+  },
+});
+
+if (!r.ok) {
+  const body = await r.text().catch(() => "");
+  console.error(`✗ Supabase fetch failed: ${r.status} ${r.statusText}\n  ${body}`);
   process.exit(1);
 }
 
-const items = (data ?? []) as DbItem[];
-if (items.length === 0) {
+const items = (await r.json()) as DbItem[];
+if (!Array.isArray(items) || items.length === 0) {
   console.error("✗ catalog_current returned 0 rows — refusing to generate empty catalog");
   process.exit(1);
 }
