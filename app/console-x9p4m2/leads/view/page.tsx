@@ -329,16 +329,23 @@ function AdminLeadViewPage() {
               <div className="mt-3 max-h-96 overflow-y-auto rounded-xl border border-line bg-light/30">
                 <table className="w-full text-xs">
                   <tbody>
-                    {estLines.map((l, i) => (
-                      <tr key={i} className="border-b border-line/40 last:border-0">
-                        <td className="px-3 py-1.5 text-graphite-900">
-                          {String(l.label ?? l.key ?? "—")}
-                        </td>
-                        <td className="px-3 py-1.5 text-right font-mono text-graphite-900/70">
-                          {typeof l.cost === "number" ? fmtRub(l.cost) : "—"}
-                        </td>
-                      </tr>
-                    ))}
+                    {estLines.map((l, i) => {
+                      // Поддерживаем оба формата:
+                      //  • {label, value} — pricing.ts (сайт /estimate) и calcEstimate в боте
+                      //  • {name, total} — полные LineItem из engine v3
+                      //  • {label, cost} — устаревший формат, на случай старых заявок
+                      const label = (l.label ?? l.name ?? l.key ?? "—") as string;
+                      const priceRaw = l.value ?? l.total ?? l.cost;
+                      const price = typeof priceRaw === "number" ? priceRaw : null;
+                      return (
+                        <tr key={i} className="border-b border-line/40 last:border-0">
+                          <td className="px-3 py-1.5 text-graphite-900">{String(label)}</td>
+                          <td className="px-3 py-1.5 text-right font-mono text-graphite-900/70">
+                            {price !== null ? fmtRub(price) : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
