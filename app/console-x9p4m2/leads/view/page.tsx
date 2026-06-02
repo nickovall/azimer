@@ -313,8 +313,8 @@ function AdminLeadViewPage() {
                 Параметры объекта ({Object.keys(estState).length})
               </summary>
               <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                {Object.entries(estState).map(([k, v]) => (
-                  <Field key={k} label={k}>{formatVal(v)}</Field>
+                {orderedStateEntries(estState).map(([k, v]) => (
+                  <Field key={k} label={prettifyStateKey(k)}>{prettifyStateValue(k, v)}</Field>
                 ))}
               </dl>
             </details>
@@ -392,4 +392,121 @@ function formatVal(v: unknown): string {
   if (typeof v === "boolean") return v ? "да" : "нет";
   if (typeof v === "object") return JSON.stringify(v);
   return String(v);
+}
+
+// ────────────────── Человеко-читаемые лейблы параметров заявки ──────────────────
+
+// Лейблы ключей (то что слева)
+const STATE_KEY_LABELS: Record<string, string> = {
+  objectType: "Тип объекта",
+  region:     "Регион",
+  frame:      "Каркас",
+  length:     "Длина, м",
+  width:      "Ширина, м",
+  height:     "Высота, м",
+  cladding:   "Стены",
+  roofing:    "Кровля",
+  foundation: "Фундамент",
+  options:    "Доборные элементы",
+  // на случай если поле уже мапилось до этого через бот:
+  object_type: "Тип объекта",
+  cladding_thk: "Толщина панели, мм",
+  crane_t:    "Мостовой кран, т",
+  notes:      "Примечание",
+};
+
+// Порядок отображения (что не в списке — в конце алфавитом)
+const STATE_KEY_ORDER = [
+  "objectType", "object_type", "region",
+  "length", "width", "height",
+  "frame",
+  "cladding", "cladding_thk",
+  "roofing",
+  "foundation",
+  "options",
+  "crane_t",
+  "notes",
+];
+
+// Лейблы значений по полям (frame=metal → "Металлокаркас")
+const STATE_VALUE_LABELS: Record<string, Record<string, string>> = {
+  objectType: {
+    sklad: "Склад", angar: "Ангар", production: "Производство",
+    commercial: "Коммерческое", naves: "Навес", modular: "Модульное здание",
+    residential: "Жилое (модуль)", tent_arched: "🏕 Арочный тент (эконом)",
+  },
+  object_type: {
+    sklad: "Склад", angar: "Ангар", production: "Производство",
+    commercial: "Коммерческое", naves: "Навес", modular: "Модульное здание",
+    residential: "Жилое (модуль)", tent_arched: "🏕 Арочный тент (эконом)",
+  },
+  region: {
+    krsk_city:      "Красноярск + пригороды",
+    krsk_south:     "Юг края / Хакасия",
+    krsk_kansk:     "Канск / Ачинск",
+    krsk_north_pre: "Лесосибирск / Енисейск",
+    krsk_priangar:  "Богучаны / Кодинск",
+    krsk_evenkia:   "❄️ Эвенкия (мерзлота)",
+    krsk_taymyr:    "❄️ Таймыр / Норильск",
+    tuva:           "Тува (сейсм 8)",
+    kemerovo:       "Кемеровская обл.",
+    irkutsk:        "Иркутская обл.",
+    altai:          "Алтай",
+    other:          "Другое направление",
+  },
+  frame: {
+    lstk: "ЛСТК", metal: "Металлокаркас", modular: "Модульный",
+  },
+  cladding: {
+    none: "Без стен", proflist: "Профлист",
+    sandwich_minvata: "Сэндвич минвата", sandwich_pir: "Сэндвич PIR",
+  },
+  roofing: {
+    proflist: "Профлист",
+    sandwich: "Сэндвич", sandwich_minvata: "Сэндвич минвата", sandwich_pir: "Сэндвич PIR",
+  },
+  foundation: {
+    none: "Без фундамента",
+    pile: "Свайно-винтовой", pile_screw: "Свайно-винтовой", pile_grillage: "Свайный ростверк",
+    strip: "Ленточный",
+    slab: "Плита 200мм", slab_200: "Плита 200мм", slab_300: "Плита 300мм",
+  },
+};
+
+function prettifyStateKey(k: string): string {
+  return STATE_KEY_LABELS[k] ?? k;
+}
+
+function prettifyStateValue(k: string, v: unknown): string {
+  if (v == null || v === "") return "—";
+  // options: { gate: 4, window: 2, door: 1 } → «4 ворот, 2 окна, 1 дверь»
+  if (k === "options" && typeof v === "object" && v !== null) {
+    const o = v as Record<string, unknown>;
+    const parts: string[] = [];
+    const g = Number(o.gate ?? 0); if (g > 0) parts.push(`${g} ${plural(g, "ворота", "ворот", "ворот")}`);
+    const w = Number(o.window ?? 0); if (w > 0) parts.push(`${w} ${plural(w, "окно", "окна", "окон")}`);
+    const d = Number(o.door ?? 0); if (d > 0) parts.push(`${d} ${plural(d, "дверь", "двери", "дверей")}`);
+    return parts.length > 0 ? parts.join(", ") : "нет";
+  }
+  // Маппинг enum → человеко-читаемое значение
+  if (typeof v === "string" && STATE_VALUE_LABELS[k]?.[v]) {
+    return STATE_VALUE_LABELS[k][v];
+  }
+  return formatVal(v);
+}
+
+function plural(n: number, one: string, few: string, many: string): string {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+  return many;
+}
+
+function orderedStateEntries(state: Record<string, unknown>): Array<[string, unknown]> {
+  const known = STATE_KEY_ORDER.filter((k) => k in state).map((k) => [k, state[k]] as [string, unknown]);
+  const knownSet = new Set(STATE_KEY_ORDER);
+  const rest = Object.entries(state)
+    .filter(([k]) => !knownSet.has(k))
+    .sort(([a], [b]) => a.localeCompare(b));
+  return [...known, ...rest];
 }
