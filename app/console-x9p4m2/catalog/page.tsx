@@ -35,6 +35,8 @@ export default function AdminCatalogPage() {
   const [error, setError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [rebuilding, setRebuilding] = useState(false);
+  const [rebuildInfo, setRebuildInfo] = useState<{ web_url: string; id: number } | null>(null);
 
   const loadCatalog = useCallback(async () => {
     if (!supabase) return;
@@ -83,6 +85,25 @@ export default function AdminCatalogPage() {
     }
   }
 
+  async function triggerRebuild() {
+    if (rebuilding) return;
+    if (!confirm("Запустить пересборку сайта? Изменения цен поедут в прод примерно через 5 минут.")) return;
+    setRebuilding(true);
+    setError(null);
+    setRebuildInfo(null);
+    try {
+      const r = await adminFetch<{ ok: true; pipeline: { id: number; web_url: string } }>(
+        password,
+        { action: "trigger_rebuild", reason: "catalog_update" },
+      );
+      setRebuildInfo(r.pipeline);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRebuilding(false);
+    }
+  }
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items
@@ -101,10 +122,32 @@ export default function AdminCatalogPage() {
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-orange">Каталог</p>
           <h1 className="mt-1 text-3xl font-bold text-graphite-900">Цены</h1>
           <p className="mt-1 text-sm text-graphite-900/60">
-            {items.length} позиций · обновления применяются мгновенно для всех расчётов
+            {items.length} позиций · правки попадают в прод после пересборки сайта (~5 мин)
           </p>
         </div>
+        <button
+          onClick={triggerRebuild}
+          disabled={rebuilding}
+          className="rounded-full bg-graphite-950 px-5 py-2.5 text-sm font-semibold text-light transition-colors hover:bg-orange disabled:opacity-50"
+          title="Запустить GitLab CI: сгенерировать новый snapshot цен и задеплоить сайт"
+        >
+          {rebuilding ? "Запускаем..." : "🚀 Опубликовать на сайте"}
+        </button>
       </div>
+
+      {rebuildInfo && (
+        <div className="mt-4 rounded-2xl border border-green-300 bg-green-50 p-4 text-sm text-green-900">
+          ✅ Pipeline #{rebuildInfo.id} запущен. Через ~5 мин новые цены будут на сайте.{" "}
+          <a
+            href={rebuildInfo.web_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-orange"
+          >
+            Следить за прогрессом →
+          </a>
+        </div>
+      )}
 
       <div className="my-6 flex flex-wrap items-center gap-3">
         <input

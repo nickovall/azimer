@@ -262,6 +262,49 @@ Deno.serve(async (req) => {
     });
   }
 
+  // ════════════════════════════════════════════════════════════════
+  //   REBUILD — триггер GitLab pipeline для пересборки сайта
+  //   (используется когда менеджер изменил цены в каталоге и хочет
+  //    выкатить новый snapshot без программиста)
+  // ════════════════════════════════════════════════════════════════
+  if (action === "trigger_rebuild") {
+    const triggerToken = Deno.env.get("GITLAB_TRIGGER_TOKEN") ?? "";
+    const projectId    = Deno.env.get("GITLAB_PROJECT_ID")    ?? "";
+    const ref          = (body.ref as string | undefined) ?? "main";
+    const reason       = (body.reason as string | undefined) ?? "manual_rebuild";
+
+    if (!triggerToken || !projectId) {
+      return json({
+        error: "GITLAB_TRIGGER_TOKEN или GITLAB_PROJECT_ID не настроены в Secrets",
+      }, 500);
+    }
+
+    const triggerUrl = `https://gitlab.com/api/v4/projects/${projectId}/trigger/pipeline`;
+    const form = new FormData();
+    form.append("token", triggerToken);
+    form.append("ref", ref);
+    form.append("variables[REBUILD_REASON]", reason);
+
+    const r = await fetch(triggerUrl, { method: "POST", body: form });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      return json({
+        error: `GitLab trigger failed: ${r.status} ${r.statusText}`,
+        details: data,
+      }, 502);
+    }
+    return json({
+      ok: true,
+      pipeline: {
+        id:        data.id,
+        status:    data.status,
+        web_url:   data.web_url,
+        ref:       data.ref,
+        created_at: data.created_at,
+      },
+    });
+  }
+
   return json({ error: "Unknown action: " + action }, 400);
 });
 
