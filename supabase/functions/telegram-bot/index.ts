@@ -9,6 +9,13 @@
 //
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Полный движок калькулятора v3 — bundled из lib/calculator/ через esbuild
+// (scripts/build-bot-bundle.mts). Тот же расчёт что на сайте — один источник правды.
+import {
+  calculate as engineCalculate,
+  formatRub,
+  CATALOG_VERSION,
+} from "../_shared/calculator.bundle.js";
 
 const SITE_URL = Deno.env.get("SITE_URL") ?? "https://azimer.ru";
 
@@ -56,29 +63,30 @@ const OBJECT_TYPES = [
   { id: 'modular',    label: 'Модульное' },
 ];
 
+// rate-поля удалены: цены теперь считает engine из БД через bundle (catalog.generated.ts)
 const FRAMES = [
-  { id: 'lstk',    label: 'ЛСТК',          rate: 10500 },
-  { id: 'metal',   label: 'Металлокаркас', rate: 13000 },
-  { id: 'modular', label: 'Модульный',     rate: 38000 },
+  { id: 'lstk',    label: 'ЛСТК' },
+  { id: 'metal',   label: 'Металлокаркас' },
+  { id: 'modular', label: 'Модульный' },
 ];
 
 const CLADDINGS = [
-  { id: 'none',             label: 'Без стен',              rate: 0 },
-  { id: 'proflist',         label: 'Профлист',              rate: 850 },
-  { id: 'sandwich_minvata', label: 'Сэндвич минвата 150',   rate: 3900 },
-  { id: 'sandwich_pir',     label: 'Сэндвич PIR 150',       rate: 4600 },
+  { id: 'none',             label: 'Без стен' },
+  { id: 'proflist',         label: 'Профлист' },
+  { id: 'sandwich_minvata', label: 'Сэндвич минвата' },
+  { id: 'sandwich_pir',     label: 'Сэндвич PIR' },
 ];
 
 const ROOFINGS = [
-  { id: 'proflist', label: 'Профлист',      rate: 950 },
-  { id: 'sandwich', label: 'Сэндвич 150мм', rate: 4100 },
+  { id: 'proflist', label: 'Профлист' },
+  { id: 'sandwich', label: 'Сэндвич' },
 ];
 
 const FOUNDATIONS = [
-  { id: 'none',  label: 'Без фундамента',  rate: 0 },
-  { id: 'pile',  label: 'Свайно-винтовой', rate: 3050 },
-  { id: 'strip', label: 'Ленточный',       rate: 4500 },
-  { id: 'slab',  label: 'Плита 200мм',     rate: 6500 },
+  { id: 'none',  label: 'Без фундамента' },
+  { id: 'pile',  label: 'Свайно-винтовой' },
+  { id: 'strip', label: 'Ленточный' },
+  { id: 'slab',  label: 'Плита 200мм' },
 ];
 
 // Регионы строительства (для нового шага визарда). ID совпадает с lib/calculator/regions.ts
@@ -93,59 +101,96 @@ const REGIONS_BOT: Record<string, string> = {
   other:           'Другой регион',
 };
 
-const GATE_PRICE   = 180000;
-const WINDOW_PRICE = 22000;
-const DOOR_PRICE   = 18000;
+// ────────────────── Маппинг Wizard state → BuildingInput движка ──────────────────
+
+const mapFrame = (s?: string) =>
+  s === 'lstk' ? 'lstk' : s === 'metal' ? 'metal' : 'modular' as const;
+
+const mapCladding = (s?: string) =>
+  s === 'proflist'         ? 'proflist'
+  : s === 'sandwich_minvata' ? 'sandwich_minvata'
+  : s === 'sandwich_pir'     ? 'sandwich_pir'
+  : 'none' as const;
+
+// В Wizard бот использует короткое 'sandwich' (без расщепления minvata/pir).
+// Кровельная панель: по умолчанию минвата (стандарт рынка); если стены PIR — кровля тоже PIR.
+const mapRoofing = (roofing: string | undefined, cladding: string | undefined) => {
+  if (roofing === 'sandwich') {
+    return cladding === 'sandwich_pir' ? 'sandwich_pir' : 'sandwich_minvata';
+  }
+  return 'proflist' as const;
+};
+
+const mapFoundation = (s?: string) =>
+  s === 'pile'  ? 'pile_screw'
+  : s === 'strip' ? 'strip'
+  : s === 'slab'  ? 'slab_200'
+  : 'none' as const;
+
+function mapWizardToInput(c: Collected): any {
+  const cladding = mapCladding(c.cladding);
+  const roofing  = mapRoofing(c.roofing, c.cladding);
+  const thk = (c.cladding_thk ?? 150) as any;
+  return {
+    objectType:  (c.object_type ?? 'sklad') as any,
+    region:      c.region || undefined,
+    length:      c.length ?? 0,
+    width:       c.width ?? 0,
+    height:      c.height ?? 0,
+    frame:       mapFrame(c.frame),
+    cladding,
+    claddingThk: cladding === 'sandwich_minvata' || cladding === 'sandwich_pir' ? thk : undefined,
+    roofing,
+    roofingThk:  roofing === 'sandwich_minvata' || roofing === 'sandwich_pir'  ? thk : undefined,
+    foundation:  mapFoundation(c.foundation),
+    gates:       c.gates ?? [],
+    windows:     c.windows ?? [],
+    doors:       { count: c.doors?.count ?? 0 },
+    craneCapacityT: (c.crane_t ?? 0) > 0 ? c.crane_t : undefined,
+  };
+}
+
+// ────────────────── Обёртка: единый формат как был у старого calcEstimate ──────────────────
+// Возвращает то что ждут formatSummary и finalizeKpAndCreateLead.
+// Под капотом — полный engine v3 + распределение НР/СП/маржи пропорционально группам
+// (как в lib/pricing.ts), чтобы клиент НЕ видел отдельной строки «наценка»
+
+const GROUP_LABELS: Record<string, string> = {
+  frame:      'Каркас',
+  walls:      'Стеновое ограждение',
+  roof:       'Кровля',
+  foundation: 'Фундамент',
+  openings:   'Доборные элементы',
+  logistics:  'Логистика',
+};
 
 function calcEstimate(c: Collected) {
+  const input = mapWizardToInput(c);
+  if ((input.length ?? 0) <= 0 || (input.width ?? 0) <= 0 || input.height <= 0) {
+    return { lines: [], total: 0, low: 0, high: 0, complexity: 'TYPICAL', flags: [] as string[] };
+  }
+  const est = engineCalculate(input);
+
+  // Суммируем по группам, добавляем мультипликатор для пропорционального распределения
+  // накладных/маржи/наценки — как в lib/pricing.ts calcEstimate
+  const groupSums: Record<string, number> = {};
+  for (const l of est.lines) groupSums[l.group] = (groupSums[l.group] ?? 0) + l.total;
+  const directSum = Object.values(groupSums).reduce((s, v) => s + v, 0);
+  const multiplier = directSum > 0 ? est.totals.final / directSum : 1;
+
   const lines: { label: string; value: number }[] = [];
-  const area = (c.length ?? 0) * (c.width ?? 0);
-  const wallArea = 2 * ((c.length ?? 0) + (c.width ?? 0)) * (c.height ?? 0);
-
-  const frame = FRAMES.find(f => f.id === c.frame);
-  if (frame && area > 0) lines.push({ label: `Каркас (${frame.label})`, value: area * frame.rate });
-
-  const cladding = CLADDINGS.find(x => x.id === c.cladding);
-  if (cladding && cladding.rate > 0 && wallArea > 0 && c.frame !== 'modular') {
-    lines.push({ label: `Стены (${cladding.label})`, value: wallArea * cladding.rate });
+  for (const [g, v] of Object.entries(groupSums)) {
+    if (v > 0) lines.push({ label: GROUP_LABELS[g] ?? g, value: Math.round(v * multiplier) });
   }
 
-  const roofing = ROOFINGS.find(x => x.id === c.roofing);
-  if (roofing && roofing.rate > 0 && area > 0 && c.frame !== 'modular') {
-    lines.push({ label: `Кровля (${roofing.label})`, value: area * roofing.rate });
-  }
-
-  const fnd = FOUNDATIONS.find(x => x.id === c.foundation);
-  if (fnd && fnd.rate > 0 && area > 0) lines.push({ label: `Фундамент (${fnd.label})`, value: area * fnd.rate });
-
-  const gatesCount = c.gates?.reduce((a, g) => a + g.count, 0) ?? 0;
-  if (gatesCount > 0) lines.push({ label: `Ворота (${gatesCount} шт)`, value: gatesCount * GATE_PRICE });
-
-  const winCount = c.windows?.reduce((a, w) => a + w.count, 0) ?? 0;
-  if (winCount > 0) lines.push({ label: `Окна (${winCount} шт)`, value: winCount * WINDOW_PRICE });
-
-  const doorCount = c.doors?.count ?? 0;
-  if (doorCount > 0) lines.push({ label: `Двери (${doorCount} шт)`, value: doorCount * DOOR_PRICE });
-
-  // Логистика НЕ учитывается в калькуляторе — Азамат считает её отдельно
-  // (нет своего производства, доставка зависит от конкретного партнёра)
-
-  // Надбавка за мостовой кран: +5% за каждую тонну (подкрановые балки + усиление колонн)
-  const craneT = c.crane_t ?? 0;
-  if (craneT > 0 && craneT < 20) {
-    const craneCost = lines.reduce((s, l) => s + l.value, 0) * (craneT * 0.05);
-    lines.push({ label: `Подкрановые балки + усиление под кран ${craneT}т`, value: craneCost });
-  }
-
-  let total = lines.reduce((sum, l) => sum + l.value, 0);
-  // Эконом-линейка: арочный тент-каркас в 3 раза дешевле
-  if (c.object_type === "tent_arched") {
-    total *= 0.33;
-    for (const l of lines) l.value *= 0.33;
-  }
-  const low  = Math.round((total * 0.9)  / 1000) * 1000;
-  const high = Math.round((total * 1.15) / 1000) * 1000;
-  return { lines, total, low, high };
+  return {
+    lines,
+    total: est.totals.final,
+    low:   est.totals.low,
+    high:  est.totals.high,
+    complexity: est.complexity,
+    flags: est.flags,
+  };
 }
 
 function parsePhone(s: string): string | null {
@@ -303,7 +348,7 @@ function formatSummary(c: Collected): string {
   const fmtItems = (items?: { size: string; count: number }[]) =>
     items && items.length ? items.map(i => `${i.count} × ${i.size}`).join(', ') : 'нет';
   const fmtRub = (n: number) => new Intl.NumberFormat('ru-RU').format(Math.round(n)) + ' ₽';
-  const { lines, total, low, high } = calcEstimate(c);
+  const { lines, total, low, high, complexity, flags } = calcEstimate(c);
   const thkSuffix = c.cladding_thk ? ` ${c.cladding_thk}мм` : '';
   let msg = `<b>📋 РЕЗЮМЕ КП</b>\n\n`;
   msg += `<b>Клиент:</b> ${c.client_name ?? '—'}\n`;
@@ -326,11 +371,18 @@ function formatSummary(c: Collected): string {
   if ((c.crane_t ?? 0) >= 20) {
     msg += `\n🔴 <b>ВНИМАНИЕ:</b> Кран >10т требует индивидуального инженерного расчёта.\nКП будет персональным после согласования с инженером.\n`;
   }
-  msg += `\n<b>📊 СМЕТА (предварительная)</b>\n`;
+  msg += `\n<b>📊 СМЕТА (engine v3, тот же расчёт что на сайте)</b>\n`;
   for (const line of lines) msg += `${line.label}: <code>${fmtRub(line.value)}</code>\n`;
   msg += `\n<b>ИТОГО:</b> <b>${fmtRub(total)}</b>\n`;
   msg += `<i>Диапазон: ${fmtRub(low)} — ${fmtRub(high)}</i>\n`;
+  if (complexity === 'ENGINEER_REQUIRED') {
+    msg += `\n🔴 <b>ИНЖЕНЕРНАЯ ПРОВЕРКА.</b> Флаги: ${flags.join(', ')}.\n`;
+    msg += `Цифры выше — ориентир. Финальное КП — после расчёта инженера.\n`;
+  } else if (complexity === 'EXTENDED') {
+    msg += `\n🟡 <i>Расширенный объект (флаги: ${flags.join(', ')}). Цена ориентировочная.</i>\n`;
+  }
   msg += `\n<i>⚠️ Логистика рассчитывается отдельно после согласования.</i>\n`;
+  msg += `<i>Версия каталога: ${CATALOG_VERSION}</i>\n`;
   return msg;
 }
 
@@ -1046,6 +1098,7 @@ async function finalizeKpAndCreateLead(chatId: number, session: any) {
       object_type: c.object_type,
       message:     noteParts.join("\n") || null,
       estimate:    estimateData,
+      catalog_version: CATALOG_VERSION,
     })
     .select("id")
     .single();

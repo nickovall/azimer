@@ -19,6 +19,11 @@ pages:
   script:
     - npm ci --prefer-offline --no-audit
     - npm run build
+    # После build сайта — собираем bundle калькулятора для бота и автодеплоим
+    # telegram-bot Edge Function, чтобы бот и сайт оставались синхронизированы
+    # (один движок, один каталог).
+    - npm run build:bot-bundle
+    - npx supabase functions deploy telegram-bot --no-verify-jwt --project-ref objgpsjyftdrhafapwvw
     - rm -rf public
     - mv out public
   artifacts:

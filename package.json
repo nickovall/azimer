@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "gen:catalog": "tsx scripts/build-catalog.mts",
+    "build:bot-bundle": "tsx scripts/build-bot-bundle.mts",
+    "deploy:bot": "tsx scripts/build-catalog.mts && tsx scripts/build-bot-bundle.mts && supabase functions deploy telegram-bot --no-verify-jwt",
     "predev": "tsx scripts/build-catalog.mts",
     "prebuild": "tsx scripts/build-catalog.mts",
     "dev": "next dev",
@@ -27,6 +29,8 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "esbuild": "^0.28.0",
+    "supabase": "^2.104.0",
     "tailwindcss": "^4",
     "tsx": "^4.22.4",
     "typescript": "^5",
