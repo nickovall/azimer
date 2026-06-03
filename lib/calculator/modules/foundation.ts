@@ -32,23 +32,39 @@ function screwPile(input: BuildingInput, geo: Geometry): LineItem[] {
   const region = getRegion(input.region);
   const isCold     = detectInsulation(input) === "cold";
   const isSwelling = input.soilType === "swelling" || input.soilType === "clay";
-  const isHeavyLoad = (input.craneCapacityT ?? 0) > 0 || (input.frame === "metal" && !isCold);
 
-  // Расчёт количества свай через сетку колонн (не через площадь!)
-  // Реальность: сваи ставятся по сетке колонн (шаг 4-6 м), под каждую точку 1-2 сваи.
-  // Для 12×24 (288 м²) → ~18-24 сваи, для 7.44×4.60 (34 м²) → ~9-12 свай.
-  // Источник: bvz.su типовой проект 12×24, sibsvai.ru, stroy-svai.ru
-  const pileStep = isCold ? 6.0                  // холодный — лёгкий каркас, шаг колонн 6 м
-    : isSwelling           ? 3.0                  // пучинистые — шаг 3 м (удвоенный)
-    : isHeavyLoad          ? 4.0                  // тяжёлый каркас / кран — шаг 4 м
-    :                        5.0;                 // стандарт — шаг 5 м
+  // Расчёт isHeavyLoad по фактической массе здания, не по типу каркаса.
+  // Раньше: любой тёплый металлокаркас → Ø133, даже жилой 34 м² с массой 5 т.
+  // Теперь: смотрим на нагрузку на сваю по оценке массы здания.
+  // Источник: СП 24.13330, СП 16.13330. Норматив свая Ø108×2500 = 5 т, Ø133×3000 = 8 т.
+  const frameKgPerM2 = input.frame === "lstk" ? 25 : input.frame === "metal" ? 50 : 0;
+  const cladKgPerM2  = (input.cladding === "none" || input.cladding === "proflist") ? 8 : 22;
+  const buildingMassT = (
+    geo.floorArea * frameKgPerM2 * (isCold ? 0.6 : 1.0) +
+    (geo.wallArea + geo.roofArea) * cladKgPerM2 +
+    geo.floorArea * 50  // полезная нагрузка ~50 кг/м² (СП 20)
+  ) / 1000;
+  const isHeavyLoad = (input.craneCapacityT ?? 0) > 0 || buildingMassT > 80;
+
+  // Шаг сетки свай — изменено: стандарт 6 м (было 5).
+  // Реальные типовые проекты используют шаг колонн 6 м для лёгких/средних зданий.
+  // Свайно-винтовое поле часто реже, чем сетка колонн (1 свая на узел + обвязка).
+  const pileStep = isSwelling  ? 3.0                  // пучинистые — шаг 3 м (удвоенный)
+    : isHeavyLoad              ? 4.0                  // кран / тяжёлая нагрузка — шаг 4 м
+    :                            6.0;                 // стандарт (включая cold)
 
   const L = Math.max(input.length, input.width);
   const W = Math.min(input.length, input.width);
-  const cols = Math.max(2, ceil(L / pileStep) + 1);   // точки вдоль длинной стороны
-  const rows = Math.max(2, ceil(W / pileStep) + 1);   // точки вдоль короткой стороны
-  // +30% на промежуточные сваи (под обвязку, прогоны, входные группы)
-  let piles = ceil(cols * rows * 1.30);
+  const cols = Math.max(2, ceil(L / pileStep) + 1);
+  const rows = Math.max(2, ceil(W / pileStep) + 1);
+  // Запас 10% на обвязку и промежуточные (было 30% — давало завышение в 2× по сравнению с типовыми проектами)
+  let piles = ceil(cols * rows * 1.10);
+
+  // Дополнительная проверка: минимум по нагрузке (≥1.15× от расчётной)
+  // Если оценка по массе требует больше — берём максимум
+  const pileCapKg = isHeavyLoad ? 8000 : 5000;
+  const minPilesByLoad = ceil(buildingMassT * 1000 * 1.15 / pileCapKg);
+  piles = Math.max(piles, minPilesByLoad);
 
   // ВЕЧНАЯ МЕРЗЛОТА — сваи 6-8 метров, плотнее шаг, +30% к количеству
   if (region.permafrost) {
