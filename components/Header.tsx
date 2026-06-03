@@ -11,10 +11,25 @@ import { nav } from "@/lib/content";
 export default function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  useLenis(({ scroll }) => setScrolled(scroll > 24));
+
+  // Hysteresis: переключаемся только когда scroll пересекает разные границы вверх/вниз.
+  // Это убирает дёрганье шапки на iOS при momentum-scroll рядом со значением 24.
+  // Плюс игнорируем отрицательные значения (iOS overscroll bounce) и сравниваем
+  // через функциональный setter, чтобы избежать лишних ре-рендеров на каждом scroll-кадре.
+  useLenis(({ scroll }) => {
+    setScrolled((prev) => {
+      if (scroll < 0) return prev;             // iOS bounce — игнорируем
+      if (prev && scroll < 12) return false;   // нижний порог
+      if (!prev && scroll > 24) return true;   // верхний порог (зона покоя 12-24)
+      return prev;
+    });
+  });
 
   return (
     <header
+      // translate3d принудительно поднимает шапку в GPU-слой — Safari перестаёт
+      // перерендеривать её на каждый scroll-кадр, плюс убирается subpixel-дрожание.
+      style={{ transform: "translate3d(0,0,0)", willChange: "box-shadow" }}
       className={`fixed inset-x-0 top-0 z-50 border-b border-line bg-white transition-shadow duration-500 ${
         scrolled ? "shadow-[0_6px_28px_-14px_rgba(0,0,0,0.22)]" : ""
       }`}
