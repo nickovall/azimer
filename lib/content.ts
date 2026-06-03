@@ -153,13 +153,13 @@ export const objectTypes = [
     tag: "Коммерция",
     title: "Коммерческие здания",
     text: "Торговые, сервисные и административные объекты.",
-    img: "/photos/obj-commercial.jpg",
+    img: "/photos/proc-frame.jpg",
   },
   {
     tag: "Модули",
     title: "Модульные здания",
     text: "АБК, офисы и бытовые помещения из блок-модулей.",
-    img: "/photos/obj-modular.jpg",
+    img: "/photos/proc-roof.jpg",
   },
 ];
 
@@ -285,10 +285,10 @@ export const projects = [
     text: "Несущий каркас под технологическое оборудование и резервуары.",
   },
   {
-    img: "/photos/obj-commercial.jpg",
+    img: "/photos/proc-frame.jpg",
     tag: "Коммерция",
-    title: "Коммерческий зал",
-    text: "Просторное помещение под мероприятия с отделкой и освещением.",
+    title: "Каркас коммерческого объекта",
+    text: "Несущий металлокаркас под коммерческое здание — на этапе монтажа.",
   },
   {
     img: "/photos/obj-angar.jpg",
@@ -297,10 +297,10 @@ export const projects = [
     text: "Монтаж каркаса с зашивкой стен сэндвич-панелями.",
   },
   {
-    img: "/photos/obj-modular.jpg",
+    img: "/photos/proc-roof.jpg",
     tag: "Модули",
-    title: "Модульное здание",
-    text: "Быстровозводимое здание из металлокаркаса с фасадом.",
+    title: "Модульный блок (сборка)",
+    text: "Внутренний монтаж модульного блок-контейнера — утепление и каркас перегородок.",
   },
   {
     img: "/photos/interior.jpg",
