@@ -263,6 +263,147 @@ Deno.serve(async (req) => {
   }
 
   // ════════════════════════════════════════════════════════════════
+  //   MESSAGE TEMPLATES (SMS/Email) — CRUD
+  // ════════════════════════════════════════════════════════════════
+
+  if (action === "list_templates") {
+    const channel = body.channel as string | undefined;
+    let q = sb.from("message_templates")
+      .select("id, channel, slug, name, subject, body, is_active, sort_order, updated_at")
+      .order("sort_order", { ascending: true });
+    if (channel) q = q.eq("channel", channel);
+    if (body.only_active !== false) q = q.eq("is_active", true);
+    const { data, error } = await q;
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true, templates: data });
+  }
+
+  if (action === "save_template") {
+    const { id, channel, slug, name, subject, body: tplBody, is_active, sort_order } = body;
+    if (!channel || !slug || !name || !tplBody) return json({ error: "Need channel, slug, name, body" }, 400);
+    if (channel !== "sms" && channel !== "email") return json({ error: "channel must be sms or email" }, 400);
+    const row = {
+      channel, slug, name,
+      subject: subject ?? null,
+      body: tplBody,
+      is_active: is_active !== false,
+      sort_order: sort_order ?? 0,
+    };
+    if (id) {
+      const { error } = await sb.from("message_templates").update(row).eq("id", id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true, id });
+    } else {
+      const { data, error } = await sb.from("message_templates").insert(row).select("id").single();
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true, id: data.id });
+    }
+  }
+
+  if (action === "delete_template") {
+    const { id } = body;
+    if (!id) return json({ error: "Need id" }, 400);
+    // soft delete
+    const { error } = await sb.from("message_templates").update({ is_active: false }).eq("id", id);
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true });
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  //   SEND SMS / EMAIL + история отправок
+  // ════════════════════════════════════════════════════════════════
+
+  if (action === "send_sms" || action === "send_email") {
+    const channel: "sms" | "email" = action === "send_sms" ? "sms" : "email";
+    const { lead_id, template_id, template_slug, custom_body, custom_subject } = body;
+    if (!lead_id) return json({ error: "Need lead_id" }, 400);
+
+    // 1. Получить lead
+    const { data: lead, error: leadErr } = await sb
+      .from("leads").select("*").eq("id", lead_id).single();
+    if (leadErr || !lead) return json({ error: leadErr?.message ?? "Lead not found" }, 404);
+
+    // 2. Определить тело и subject
+    let tpl: any = null;
+    if (template_id) {
+      const r = await sb.from("message_templates").select("*").eq("id", template_id).single();
+      tpl = r.data;
+    } else if (template_slug) {
+      const r = await sb.from("message_templates").select("*").eq("slug", template_slug).single();
+      tpl = r.data;
+    }
+
+    const rawBody = custom_body ?? tpl?.body;
+    const rawSubject = custom_subject ?? tpl?.subject;
+    if (!rawBody) return json({ error: "Need template or custom_body" }, 400);
+
+    // 3. Рендер плейсхолдеров
+    const bodyRendered = renderPlaceholders(rawBody, lead);
+    const subjectRendered = rawSubject ? renderPlaceholders(rawSubject, lead) : null;
+
+    // 4. Recipient
+    const recipient = channel === "sms" ? normalizePhone(lead.phone) : lead.email;
+    if (!recipient) {
+      return json({ error: `Lead has no ${channel === "sms" ? "phone" : "email"}` }, 400);
+    }
+
+    // 5. Создать запись pending
+    const { data: msgRow, error: msgErr } = await sb.from("lead_messages").insert({
+      lead_id,
+      channel,
+      template_id: tpl?.id ?? null,
+      template_slug: tpl?.slug ?? null,
+      recipient,
+      subject: subjectRendered,
+      body_rendered: bodyRendered,
+      status: "pending",
+    }).select("id").single();
+    if (msgErr) return json({ error: msgErr.message }, 500);
+    const msgId = msgRow.id;
+
+    // 6. Отправка
+    let status: "sent" | "failed" = "sent";
+    let providerResp: any = null;
+    let errorMsg: string | null = null;
+
+    if (channel === "sms") {
+      const result = await sendSms(recipient, bodyRendered);
+      providerResp = result.response;
+      if (!result.ok) { status = "failed"; errorMsg = result.error; }
+    } else {
+      const result = await sendEmail(recipient, subjectRendered ?? "АЗИМЕР", bodyRendered);
+      providerResp = result.response;
+      if (!result.ok) { status = "failed"; errorMsg = result.error; }
+    }
+
+    // 7. Обновить запись результатом
+    await sb.from("lead_messages").update({
+      status,
+      provider_resp: providerResp,
+      error_message: errorMsg,
+    }).eq("id", msgId);
+
+    return json({
+      ok: status === "sent",
+      message_id: msgId,
+      status,
+      error: errorMsg,
+      preview: { recipient, subject: subjectRendered, body: bodyRendered.slice(0, 200) },
+    });
+  }
+
+  if (action === "list_lead_messages") {
+    const { lead_id } = body;
+    if (!lead_id) return json({ error: "Need lead_id" }, 400);
+    const { data, error } = await sb.from("lead_messages")
+      .select("id, channel, template_slug, recipient, subject, body_rendered, status, error_message, sent_at")
+      .eq("lead_id", lead_id)
+      .order("sent_at", { ascending: false });
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true, messages: data });
+  }
+
+  // ════════════════════════════════════════════════════════════════
   //   REBUILD — триггер GitLab pipeline для пересборки сайта
   //   (используется когда менеджер изменил цены в каталоге и хочет
   //    выкатить новый snapshot без программиста)
@@ -309,6 +450,151 @@ Deno.serve(async (req) => {
 
   return json({ error: "Unknown action: " + action }, 400);
 });
+
+// ════════════════════════════════════════════════════════════════
+//   УТИЛИТЫ ДЛЯ ОТПРАВКИ СООБЩЕНИЙ
+// ════════════════════════════════════════════════════════════════
+
+const SITE_URL = Deno.env.get("SITE_URL") ?? "https://azimer.ru";
+const MANAGER_PHONE = Deno.env.get("MANAGER_PHONE") ?? "+7 (391) 000-00-00";
+const MANAGER_NAME  = Deno.env.get("MANAGER_NAME")  ?? "Менеджер АЗИМЕР";
+const SMSC_LOGIN    = Deno.env.get("SMSC_LOGIN")    ?? "";
+const SMSC_PSW      = Deno.env.get("SMSC_PSW")      ?? "";
+const SMSC_SENDER   = Deno.env.get("SMSC_SENDER")   ?? "SMSC.RU";
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
+const EMAIL_FROM = Deno.env.get("EMAIL_FROM") ?? "АЗИМЕР <onboarding@resend.dev>";
+
+const REGION_LABELS_MSG: Record<string, string> = {
+  krsk_city: "Красноярск + пригороды",
+  krsk_south: "Юг края / Хакасия",
+  krsk_kansk: "Канск / Ачинск",
+  krsk_north_pre: "Лесосибирск / Енисейск",
+  krsk_priangar: "Богучаны / Кодинск",
+  krsk_evenkia: "Эвенкия (мерзлота)",
+  krsk_taymyr: "Таймыр / Норильск",
+  tuva: "Тува",
+  kemerovo: "Кемеровская область",
+  irkutsk: "Иркутская область",
+  altai: "Алтай",
+  other: "Другое направление",
+};
+const OBJECT_LABELS_MSG: Record<string, string> = {
+  sklad: "Склад",
+  angar: "Ангар",
+  production: "Производственное здание",
+  commercial: "Коммерческое здание",
+  naves: "Навес",
+  modular: "Модульное здание",
+  residential: "Жилой модуль",
+  tent_arched: "Арочный тент-каркас",
+};
+
+function fmtRubMsg(n: number | null | undefined): string {
+  if (typeof n !== "number") return "—";
+  return new Intl.NumberFormat("ru-RU").format(Math.round(n)) + " ₽";
+}
+
+function buildKpUrlForLead(lead: any): string {
+  const est = lead?.estimate;
+  if (!est) return SITE_URL + "/kp/";
+  try {
+    const json = JSON.stringify(est);
+    const b64 = btoa(unescape(encodeURIComponent(json)));
+    return `${SITE_URL}/kp/#data=${b64}`;
+  } catch {
+    return SITE_URL + "/kp/";
+  }
+}
+
+function renderPlaceholders(body: string, lead: any): string {
+  const est = lead?.estimate ?? {};
+  const state = est?.state ?? {};
+  const today = new Date();
+  const dd = String(today.getDate()).padStart(2, "0");
+  const mm = String(today.getMonth() + 1).padStart(2, "0");
+  const yyyy = today.getFullYear();
+
+  const map: Record<string, string> = {
+    client_name: (lead.name ?? "клиент").split(" ")[0] || "клиент",
+    name: lead.name ?? "",
+    phone: lead.phone ?? "",
+    email: lead.email ?? "",
+    object_type: OBJECT_LABELS_MSG[state.objectType ?? state.object_type ?? lead.object_type] ?? (lead.object_type ?? "—"),
+    region: REGION_LABELS_MSG[state.region ?? ""] ?? "Красноярский край",
+    kp_url: buildKpUrlForLead(lead),
+    kp_total: fmtRubMsg(est.base ?? est.totals?.final),
+    kp_range: (typeof est.low === "number" && typeof est.high === "number")
+      ? `${fmtRubMsg(est.low)} — ${fmtRubMsg(est.high)}`
+      : "—",
+    manager_phone: MANAGER_PHONE,
+    manager_name: MANAGER_NAME,
+    date: `${dd}.${mm}.${yyyy}`,
+    azimer_site: SITE_URL,
+  };
+
+  return body.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+    if (key in map) return map[key];
+    return `{{${key}}}`; // оставляем как есть, видно что не сматчилось
+  });
+}
+
+function normalizePhone(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let digits = raw.replace(/\D/g, "");
+  if (digits.length === 11 && digits.startsWith("8")) digits = "7" + digits.slice(1);
+  if (digits.length === 10) digits = "7" + digits;
+  if (digits.length === 11 && digits.startsWith("7")) return digits;
+  return null;
+}
+
+async function sendSms(phone: string, text: string): Promise<{ ok: boolean; response: any; error: string | null }> {
+  if (!SMSC_LOGIN || !SMSC_PSW) {
+    return { ok: false, response: null, error: "SMSC credentials missing in Supabase Secrets" };
+  }
+  const params = new URLSearchParams({
+    login: SMSC_LOGIN, psw: SMSC_PSW, phones: phone, mes: text,
+    sender: SMSC_SENDER, charset: "utf-8", fmt: "3",
+  });
+  try {
+    const r = await fetch(`https://smsc.ru/sys/send.php?${params}`);
+    const data = await r.json().catch(() => null);
+    // smsc.ru fmt=3 при успехе возвращает { id, cnt }; при ошибке { error, error_code }
+    if (data && data.error) {
+      return { ok: false, response: data, error: `smsc.ru: ${data.error}` };
+    }
+    return { ok: true, response: data, error: null };
+  } catch (e: any) {
+    return { ok: false, response: null, error: e.message };
+  }
+}
+
+async function sendEmail(to: string, subject: string, body: string): Promise<{ ok: boolean; response: any; error: string | null }> {
+  if (!RESEND_API_KEY) {
+    return { ok: false, response: null, error: "RESEND_API_KEY not configured. Sign up at resend.com, verify azimer.ru domain, set Supabase secret." };
+  }
+  try {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: EMAIL_FROM,
+        to: [to],
+        subject,
+        text: body,
+      }),
+    });
+    const data = await r.json().catch(() => null);
+    if (!r.ok) {
+      return { ok: false, response: data, error: `Resend ${r.status}: ${data?.message ?? r.statusText}` };
+    }
+    return { ok: true, response: data, error: null };
+  } catch (e: any) {
+    return { ok: false, response: null, error: e.message };
+  }
+}
 
 // Если в files лежит URL — вытащим path внутри bucket lead-files; иначе вернём как есть.
 function extractStoragePath(s: string): string | null {

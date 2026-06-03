@@ -28,9 +28,10 @@ export function useAdmin() {
 // trailingSlash добавлен явно, чтобы избежать 301-redirect и hard refresh,
 // который терял бы SPA-state AdminShell (gated/authed) и ломал админку.
 const NAV = [
-  { href: ADMIN_ROOT + "/",         label: "Дашборд",  icon: "📊" },
-  { href: ADMIN_ROOT + "/leads/",   label: "Заявки",   icon: "📩" },
-  { href: ADMIN_ROOT + "/catalog/", label: "Каталог",  icon: "🗂" },
+  { href: ADMIN_ROOT + "/",           label: "Дашборд",  icon: "📊" },
+  { href: ADMIN_ROOT + "/leads/",     label: "Заявки",   icon: "📩" },
+  { href: ADMIN_ROOT + "/catalog/",   label: "Каталог",  icon: "🗂" },
+  { href: ADMIN_ROOT + "/templates/", label: "Шаблоны",  icon: "✉️" },
 ];
 
 export default function AdminShell({ children }: { children: ReactNode }) {

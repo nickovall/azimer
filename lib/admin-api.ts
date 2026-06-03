@@ -51,6 +51,30 @@ export interface LeadFileLink {
   url: string | null;
 }
 
+export interface MessageTemplate {
+  id: string;
+  channel: "sms" | "email";
+  slug: string;
+  name: string;
+  subject: string | null;
+  body: string;
+  is_active: boolean;
+  sort_order: number;
+  updated_at?: string;
+}
+
+export interface LeadMessage {
+  id: string;
+  channel: "sms" | "email";
+  template_slug: string | null;
+  recipient: string;
+  subject: string | null;
+  body_rendered: string;
+  status: "sent" | "failed" | "pending";
+  error_message: string | null;
+  sent_at: string;
+}
+
 export interface DashboardStats {
   today: number;
   week: number;

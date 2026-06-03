@@ -14,6 +14,8 @@ import {
   type LeadFull,
   type LeadFileLink,
   type LeadStatus,
+  type MessageTemplate,
+  type LeadMessage,
 } from "@/lib/admin-api";
 
 const STATUSES: LeadStatus[] = ["new", "contacted", "kp_sent", "won", "lost"];
@@ -41,6 +43,17 @@ function AdminLeadViewPage() {
   const [savingNotes, setSavingNotes] = useState(false);
   const [savingStatus, setSavingStatus] = useState<LeadStatus | null>(null);
 
+  // ── Отправка сообщений ──
+  const [templates, setTemplates] = useState<MessageTemplate[]>([]);
+  const [messages, setMessages] = useState<LeadMessage[]>([]);
+  const [sendChannel, setSendChannel] = useState<"sms" | "email">("sms");
+  const [selectedTplId, setSelectedTplId] = useState<string>("");
+  const [editingBody, setEditingBody] = useState(false);
+  const [bodyDraft, setBodyDraft] = useState("");
+  const [subjectDraft, setSubjectDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState<{ ok: boolean; text: string } | null>(null);
+
   const load = useCallback(async () => {
     if (!id) {
       setError("Не указан id заявки");
@@ -50,13 +63,16 @@ function AdminLeadViewPage() {
     setLoading(true);
     setError(null);
     try {
-      const r = await adminFetch<{ ok: true; lead: LeadFull; files: LeadFileLink[] }>(password, {
-        action: "get_lead",
-        id,
-      });
-      setLead(r.lead);
-      setFiles(r.files ?? []);
-      setNotesDraft(r.lead.notes ?? "");
+      const [leadR, tplR, msgR] = await Promise.all([
+        adminFetch<{ ok: true; lead: LeadFull; files: LeadFileLink[] }>(password, { action: "get_lead", id }),
+        adminFetch<{ ok: true; templates: MessageTemplate[] }>(password, { action: "list_templates" }),
+        adminFetch<{ ok: true; messages: LeadMessage[] }>(password, { action: "list_lead_messages", lead_id: id }),
+      ]);
+      setLead(leadR.lead);
+      setFiles(leadR.files ?? []);
+      setNotesDraft(leadR.lead.notes ?? "");
+      setTemplates(tplR.templates ?? []);
+      setMessages(msgR.messages ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -90,6 +106,82 @@ function AdminLeadViewPage() {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSavingNotes(false);
+    }
+  }
+
+  // ── Помощник: рендер плейсхолдеров локально для превью ──
+  function renderPreview(body: string, l: LeadFull | null): string {
+    if (!l) return body;
+    const est = (l.estimate as any) ?? {};
+    const state = est?.state ?? {};
+    const map: Record<string, string> = {
+      client_name: (l.name ?? "клиент").split(" ")[0] || "клиент",
+      name: l.name ?? "",
+      phone: l.phone ?? "",
+      email: l.email ?? "",
+      object_type: state.objectType ?? state.object_type ?? l.object_type ?? "—",
+      region: state.region ?? "—",
+      kp_total: typeof est.base === "number" ? fmtRub(est.base) : "—",
+      kp_range: (typeof est.low === "number" && typeof est.high === "number")
+        ? `${fmtRub(est.low)} — ${fmtRub(est.high)}` : "—",
+      kp_url: "https://azimer.ru/kp/",
+      manager_phone: "(см. в Supabase Secrets)",
+      manager_name: "Менеджер АЗИМЕР",
+      date: new Date().toLocaleDateString("ru-RU"),
+      azimer_site: "https://azimer.ru",
+    };
+    return body.replace(/\{\{(\w+)\}\}/g, (_, k) => map[k] ?? `{{${k}}}`);
+  }
+
+  const channelTemplates = templates.filter((t) => t.channel === sendChannel);
+  const selectedTpl = templates.find((t) => t.id === selectedTplId);
+  const effectiveBody = editingBody ? bodyDraft : selectedTpl?.body ?? "";
+  const effectiveSubject = editingBody ? subjectDraft : selectedTpl?.subject ?? "";
+  const previewBody = renderPreview(effectiveBody, lead);
+  const previewSubject = sendChannel === "email" ? renderPreview(effectiveSubject || "", lead) : null;
+  const recipientField = sendChannel === "sms" ? lead?.phone : lead?.email;
+  const canSend = !!selectedTplId && !!recipientField && !sending;
+
+  function pickTemplate(tplId: string) {
+    setSelectedTplId(tplId);
+    setEditingBody(false);
+    setSendResult(null);
+    const t = templates.find((x) => x.id === tplId);
+    if (t) {
+      setBodyDraft(t.body);
+      setSubjectDraft(t.subject ?? "");
+    }
+  }
+
+  async function handleSend() {
+    if (!lead || !selectedTplId) return;
+    setSending(true);
+    setSendResult(null);
+    try {
+      const r = await adminFetch<{ ok: boolean; status: string; error?: string }>(password, {
+        action: sendChannel === "sms" ? "send_sms" : "send_email",
+        lead_id: lead.id,
+        template_id: editingBody ? undefined : selectedTplId,
+        template_slug: editingBody ? undefined : selectedTpl?.slug,
+        custom_body: editingBody ? bodyDraft : undefined,
+        custom_subject: editingBody && sendChannel === "email" ? subjectDraft : undefined,
+      });
+      if (r.ok) {
+        setSendResult({ ok: true, text: "✅ Отправлено" });
+        setSelectedTplId("");
+        setEditingBody(false);
+      } else {
+        setSendResult({ ok: false, text: "❌ " + (r.error ?? "Ошибка отправки") });
+      }
+      // обновить историю
+      const msgR = await adminFetch<{ ok: true; messages: LeadMessage[] }>(password, {
+        action: "list_lead_messages", lead_id: lead.id,
+      });
+      setMessages(msgR.messages ?? []);
+    } catch (e) {
+      setSendResult({ ok: false, text: "❌ " + (e instanceof Error ? e.message : String(e)) });
+    } finally {
+      setSending(false);
     }
   }
 
@@ -159,6 +251,152 @@ function AdminLeadViewPage() {
             );
           })}
         </div>
+      </section>
+
+      {/* Отправка SMS / Email клиенту */}
+      <section className="mt-6 rounded-2xl border border-line bg-white p-5">
+        <header className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-900/60">
+            ✉️ Отправить сообщение клиенту
+          </h2>
+          <div className="flex gap-1 rounded-full bg-light p-1 text-xs">
+            <button
+              onClick={() => { setSendChannel("sms"); setSelectedTplId(""); setEditingBody(false); setSendResult(null); }}
+              className={`rounded-full px-4 py-1.5 font-medium transition-colors ${sendChannel === "sms" ? "bg-graphite-950 text-light" : "text-graphite-900/60 hover:text-graphite-900"}`}
+            >
+              📱 SMS
+            </button>
+            <button
+              onClick={() => { setSendChannel("email"); setSelectedTplId(""); setEditingBody(false); setSendResult(null); }}
+              className={`rounded-full px-4 py-1.5 font-medium transition-colors ${sendChannel === "email" ? "bg-graphite-950 text-light" : "text-graphite-900/60 hover:text-graphite-900"}`}
+            >
+              📧 Email
+            </button>
+          </div>
+        </header>
+
+        <p className="mt-3 text-xs text-graphite-900/50">
+          Получатель: <span className="font-mono text-graphite-900">{recipientField ?? <span className="text-red-600">— не указан</span>}</span>
+          {sendChannel === "email" && !recipientField && (
+            <span className="ml-2 italic">Клиент не оставил email — отправка через SMS</span>
+          )}
+        </p>
+
+        <div className="mt-4 grid gap-2">
+          <label className="text-xs uppercase tracking-wider text-graphite-900/40">Шаблон</label>
+          <select
+            value={selectedTplId}
+            onChange={(e) => pickTemplate(e.target.value)}
+            className="rounded-xl border border-line bg-light/30 px-3 py-2 text-sm focus:border-orange focus:bg-white focus:outline-none"
+          >
+            <option value="">— Выберите шаблон —</option>
+            {channelTemplates.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {selectedTplId && (
+          <>
+            {sendChannel === "email" && (
+              <div className="mt-3">
+                <label className="text-xs uppercase tracking-wider text-graphite-900/40">Тема</label>
+                <input
+                  value={editingBody ? subjectDraft : (selectedTpl?.subject ?? "")}
+                  onChange={(e) => setSubjectDraft(e.target.value)}
+                  onFocus={() => setEditingBody(true)}
+                  className="mt-1 w-full rounded-xl border border-line bg-light/30 px-3 py-2 text-sm focus:border-orange focus:bg-white focus:outline-none"
+                />
+                {editingBody && previewSubject && (
+                  <p className="mt-1 text-xs text-graphite-900/40">Превью: <span className="text-graphite-900">{previewSubject}</span></p>
+                )}
+              </div>
+            )}
+
+            <div className="mt-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs uppercase tracking-wider text-graphite-900/40">Тело сообщения</label>
+                {!editingBody && (
+                  <button onClick={() => setEditingBody(true)} className="text-xs text-orange hover:underline">
+                    ✏ Изменить перед отправкой
+                  </button>
+                )}
+              </div>
+              {editingBody ? (
+                <textarea
+                  value={bodyDraft}
+                  onChange={(e) => setBodyDraft(e.target.value)}
+                  rows={sendChannel === "email" ? 10 : 4}
+                  className="mt-1 w-full rounded-xl border border-line bg-light/30 px-3 py-2 text-sm font-mono focus:border-orange focus:bg-white focus:outline-none"
+                />
+              ) : (
+                <div className="mt-1 rounded-xl border border-line bg-light/30 px-3 py-2 text-sm font-mono whitespace-pre-wrap text-graphite-900/70">
+                  {selectedTpl?.body}
+                </div>
+              )}
+              <p className="mt-2 text-xs text-graphite-900/40">
+                Превью с подстановкой:
+              </p>
+              <div className="mt-1 rounded-xl border border-orange/30 bg-orange/5 px-3 py-2 text-sm whitespace-pre-wrap text-graphite-900">
+                {previewBody}
+              </div>
+              {previewBody.includes("{{") && (
+                <p className="mt-1 text-xs text-amber-700">
+                  ⚠ Не все плейсхолдеры подставились ({previewBody.match(/\{\{(\w+)\}\}/g)?.join(", ")}). Проверь данные в карточке.
+                </p>
+              )}
+            </div>
+
+            <div className="mt-4 flex items-center justify-between">
+              <div>
+                {sendResult && (
+                  <p className={`text-sm ${sendResult.ok ? "text-green-700" : "text-red-700"}`}>{sendResult.text}</p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                {editingBody && (
+                  <button
+                    onClick={() => { setEditingBody(false); setBodyDraft(selectedTpl?.body ?? ""); setSubjectDraft(selectedTpl?.subject ?? ""); }}
+                    className="text-xs text-graphite-900/60 hover:text-graphite-900"
+                  >
+                    Отмена правки
+                  </button>
+                )}
+                <button
+                  onClick={handleSend}
+                  disabled={!canSend}
+                  className="rounded-full bg-orange px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-bright disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {sending ? "Отправка…" : `🚀 Отправить ${sendChannel === "sms" ? "SMS" : "Email"}`}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* История отправок */}
+        {messages.length > 0 && (
+          <div className="mt-5 border-t border-line pt-4">
+            <p className="text-xs uppercase tracking-wider text-graphite-900/40">История ({messages.length})</p>
+            <ul className="mt-2 space-y-1.5">
+              {messages.map((m) => (
+                <li key={m.id} className="flex items-center gap-3 text-xs">
+                  <span className="font-mono text-graphite-900/50">{fmtDateTime(m.sent_at)}</span>
+                  <span className="rounded bg-light px-2 py-0.5 text-[10px] uppercase tracking-wider">{m.channel}</span>
+                  <span className="text-graphite-900/70 truncate flex-1">
+                    {m.template_slug ?? "—"} · {m.body_rendered.slice(0, 60)}{m.body_rendered.length > 60 ? "…" : ""}
+                  </span>
+                  <span className={
+                    m.status === "sent" ? "text-green-700" :
+                    m.status === "failed" ? "text-red-700" : "text-graphite-900/40"
+                  }>
+                    {m.status === "sent" ? "✓" : m.status === "failed" ? "✗" : "…"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       <div className="mt-6 grid gap-6 md:grid-cols-2">
