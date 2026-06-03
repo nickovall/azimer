@@ -392,6 +392,19 @@ Deno.serve(async (req) => {
     });
   }
 
+  if (action === "get_message_context") {
+    // Возвращает значения env которые используются в плейсхолдерах шаблонов —
+    // для корректного превью в UI (чтобы превью совпадало с реальной отправкой).
+    return json({
+      ok: true,
+      context: {
+        manager_phone: MANAGER_PHONE,
+        manager_name: MANAGER_NAME,
+        azimer_site: SITE_URL,
+      },
+    });
+  }
+
   if (action === "list_lead_messages") {
     const { lead_id } = body;
     if (!lead_id) return json({ error: "Need lead_id" }, 400);

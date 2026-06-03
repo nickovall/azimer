@@ -46,6 +46,11 @@ function AdminLeadViewPage() {
   // ── Отправка сообщений ──
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
   const [messages, setMessages] = useState<LeadMessage[]>([]);
+  const [msgContext, setMsgContext] = useState<{ manager_phone: string; manager_name: string; azimer_site: string }>({
+    manager_phone: "—",
+    manager_name: "—",
+    azimer_site: "https://azimer.ru",
+  });
   const [sendChannel, setSendChannel] = useState<"sms" | "email">("sms");
   const [selectedTplId, setSelectedTplId] = useState<string>("");
   const [editingBody, setEditingBody] = useState(false);
@@ -63,16 +68,20 @@ function AdminLeadViewPage() {
     setLoading(true);
     setError(null);
     try {
-      const [leadR, tplR, msgR] = await Promise.all([
+      const [leadR, tplR, msgR, ctxR] = await Promise.all([
         adminFetch<{ ok: true; lead: LeadFull; files: LeadFileLink[] }>(password, { action: "get_lead", id }),
         adminFetch<{ ok: true; templates: MessageTemplate[] }>(password, { action: "list_templates" }),
         adminFetch<{ ok: true; messages: LeadMessage[] }>(password, { action: "list_lead_messages", lead_id: id }),
+        adminFetch<{ ok: true; context: { manager_phone: string; manager_name: string; azimer_site: string } }>(
+          password, { action: "get_message_context" }
+        ).catch(() => ({ ok: true as const, context: msgContext })),
       ]);
       setLead(leadR.lead);
       setFiles(leadR.files ?? []);
       setNotesDraft(leadR.lead.notes ?? "");
       setTemplates(tplR.templates ?? []);
       setMessages(msgR.messages ?? []);
+      setMsgContext(ctxR.context);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -124,11 +133,11 @@ function AdminLeadViewPage() {
       kp_total: typeof est.base === "number" ? fmtRub(est.base) : "—",
       kp_range: (typeof est.low === "number" && typeof est.high === "number")
         ? `${fmtRub(est.low)} — ${fmtRub(est.high)}` : "—",
-      kp_url: "https://azimer.ru/kp/",
-      manager_phone: "(см. в Supabase Secrets)",
-      manager_name: "Менеджер АЗИМЕР",
+      kp_url: msgContext.azimer_site + "/kp/",
+      manager_phone: msgContext.manager_phone,
+      manager_name: msgContext.manager_name,
       date: new Date().toLocaleDateString("ru-RU"),
-      azimer_site: "https://azimer.ru",
+      azimer_site: msgContext.azimer_site,
     };
     return body.replace(/\{\{(\w+)\}\}/g, (_, k) => map[k] ?? `{{${k}}}`);
   }
