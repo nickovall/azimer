@@ -7,6 +7,15 @@ import Reveal from "@/components/ui/Reveal";
 import CtaFinal from "@/components/sections/CtaFinal";
 import { projects } from "@/lib/content";
 
+// Mapping imgPos → Tailwind class. Literal mapping чтобы Tailwind не выкосил из bundle.
+const POS_CLASS: Record<string, string> = {
+  top:    "object-top",
+  center: "object-center",
+  bottom: "object-bottom",
+  left:   "object-left",
+  right:  "object-right",
+};
+
 export const metadata: Metadata = {
   title: "Объекты — АЗИМЕР",
   description:
@@ -44,7 +53,7 @@ export default function ObektyPage() {
                   alt={p.title}
                   fill
                   sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                  className="object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+                  className={`object-cover ${POS_CLASS[p.imgPos ?? "center"]} transition-transform duration-700 ease-out group-hover:scale-105`}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-graphite-950 via-graphite-950/45 to-transparent" />
                 <div className="absolute inset-x-0 bottom-0 p-6 text-light">

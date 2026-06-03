@@ -136,30 +136,35 @@ export const objectTypes = [
     title: "Складские комплексы",
     text: "Тёплые и холодные склады для хранения и логистики.",
     img: "/photos/obj-sklad.jpg",
+    imgPos: "top" as const,         // здание в верхней половине, низ — снег
   },
   {
     tag: "Ангары",
     title: "Ангары",
     text: "Быстровозводимые ангары для техники, оборудования и хранения.",
     img: "/photos/obj-angar.jpg",
+    imgPos: "center" as const,
   },
   {
     tag: "Производство",
     title: "Производственные корпуса",
     text: "Цеха и здания под оборудование и технологические линии.",
     img: "/photos/obj-production.jpg",
+    imgPos: "top" as const,         // здание сверху, низ — щебень
   },
   {
     tag: "Коммерция",
     title: "Коммерческие здания",
     text: "Торговые, сервисные и административные объекты.",
     img: "/photos/proc-frame.jpg",
+    imgPos: "center" as const,
   },
   {
     tag: "Модули",
     title: "Модульные здания",
     text: "АБК, офисы и бытовые помещения из блок-модулей.",
     img: "/photos/proc-roof.jpg",
+    imgPos: "top" as const,         // модуль вверху, низ — пол
   },
 ];
 
@@ -274,54 +279,63 @@ export const objectTypesFull = [
 export const projects = [
   {
     img: "/photos/obj-sklad.jpg",
+    imgPos: "top" as const,
     tag: "Склад",
     title: "Складское здание",
     text: "Утеплённое каркасное здание с закрытым контуром под складские задачи.",
   },
   {
     img: "/photos/obj-production.jpg",
+    imgPos: "top" as const,
     tag: "Производство",
     title: "Каркас под резервуары",
     text: "Несущий каркас под технологическое оборудование и резервуары.",
   },
   {
     img: "/photos/proc-frame.jpg",
+    imgPos: "center" as const,
     tag: "Коммерция",
     title: "Каркас коммерческого объекта",
     text: "Несущий металлокаркас под коммерческое здание — на этапе монтажа.",
   },
   {
     img: "/photos/obj-angar.jpg",
+    imgPos: "center" as const,
     tag: "Ангар",
     title: "Каркас с зашивкой",
     text: "Монтаж каркаса с зашивкой стен сэндвич-панелями.",
   },
   {
     img: "/photos/proc-roof.jpg",
+    imgPos: "top" as const,
     tag: "Модули",
     title: "Модульный блок (сборка)",
     text: "Внутренний монтаж модульного блок-контейнера — утепление и каркас перегородок.",
   },
   {
     img: "/photos/interior.jpg",
+    imgPos: "center" as const,
     tag: "Производство",
     title: "Производственный корпус",
     text: "Каркасное здание с закрытым контуром под производство.",
   },
   {
     img: "/photos/proc-frame.jpg",
+    imgPos: "center" as const,
     tag: "Монтаж",
     title: "Монтаж металлокаркаса",
     text: "Сборка несущего каркаса с применением спецтехники.",
   },
   {
     img: "/photos/proc-welding.jpg",
+    imgPos: "center" as const,
     tag: "Конструкции",
     title: "Технические сооружения",
     text: "Изготовление и монтаж нестандартных металлоконструкций.",
   },
   {
     img: "/photos/proc-roof.jpg",
+    imgPos: "top" as const,
     tag: "Кровля",
     title: "Кровельные работы",
     text: "Монтаж кровли и закрытие контура здания.",

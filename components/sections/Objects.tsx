@@ -4,6 +4,15 @@ import Label from "../ui/Label";
 import Reveal from "../ui/Reveal";
 import { objectTypes } from "@/lib/content";
 
+// Mapping imgPos → Tailwind class. Literal mapping чтобы Tailwind не выкосил классы из bundle.
+const POS_CLASS: Record<string, string> = {
+  top:    "object-top",
+  center: "object-center",
+  bottom: "object-bottom",
+  left:   "object-left",
+  right:  "object-right",
+};
+
 export default function Objects() {
   return (
     <section id="objects" className="blueprint-paper py-24 md:py-32">
@@ -39,7 +48,7 @@ export default function Objects() {
                   alt={o.title}
                   fill
                   sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                  className="object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+                  className={`object-cover ${POS_CLASS[o.imgPos ?? "center"]} transition-transform duration-700 ease-out group-hover:scale-105`}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-graphite-950 via-graphite-950/55 to-graphite-950/10" />
                 <div className="relative flex h-full flex-col justify-between p-7 text-light">
