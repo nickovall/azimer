@@ -34,7 +34,7 @@ export default function AboutPage() {
               <Reveal>
                 <Label>О компании</Label>
                 <h2 className="mt-6 text-3xl font-extrabold leading-[1.1] tracking-[-0.02em] text-graphite-900 md:text-[2.5rem]">
-                  Каркасное строительство полного цикла
+                  Кто мы и как работаем
                 </h2>
                 <p className="mt-6 text-base leading-relaxed text-graphite-900/75 md:text-lg">
                   Компания строит каркасные здания и металлоконструкции —

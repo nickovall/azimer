@@ -14,10 +14,17 @@ export default function Counter({
 }) {
   const ref = useRef<HTMLSpanElement>(null);
   const inView = useInView(ref, { once: true, margin: "-60px" });
-  const [value, setValue] = useState(0);
+  // Инициализируем `to` чтобы:
+  //  • SSR-html содержал реальное число (важно для SEO и пользователей без JS)
+  //  • Не было mismatch при hydrate
+  // Когда элемент попадает во viewport — сбрасываем на 0 и запускаем анимацию обратно к to.
+  const [value, setValue] = useState(to);
+  const startedRef = useRef(false);
 
   useEffect(() => {
-    if (!inView) return;
+    if (!inView || startedRef.current) return;
+    startedRef.current = true;
+    setValue(0);
     const controls = animate(0, to, {
       duration,
       ease: [0.22, 1, 0.36, 1],
