@@ -7,7 +7,8 @@ import Advantages from "@/components/sections/Advantages";
 import Process from "@/components/sections/Process";
 import Gallery from "@/components/sections/Gallery";
 import Objects from "@/components/sections/Objects";
-import Testimonials from "@/components/sections/Testimonials";
+// Секция «Благодарственные письма» (Testimonials) убрана по запросу Азамата (2026-06-04).
+// Компонент и data сохранены в репо на случай возврата — см. components/sections/Testimonials.tsx.
 import Trust from "@/components/sections/Trust";
 import CtaFinal from "@/components/sections/CtaFinal";
 
@@ -23,7 +24,6 @@ export default function Home() {
       <Process />
       <Gallery />
       <Objects />
-      <Testimonials />
       <Trust />
       <CtaFinal />
     </>
