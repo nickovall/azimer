@@ -149,8 +149,8 @@ export const objectTypes = [
     tag: "Производство",
     title: "Производственные корпуса",
     text: "Цеха и здания под оборудование и технологические линии.",
-    img: "/photos/interior.jpg",     // временно — внутри производственного пролёта
-    imgPos: "center" as const,       // ждём фото с резервуарами от владельца
+    img: "/photos/obj-production.jpg",   // резервуары под каркасом (case_04)
+    imgPos: "center" as const,
   },
   {
     tag: "Коммерция",
@@ -285,11 +285,11 @@ export const projects = [
     text: "Утеплённое каркасное здание с закрытым контуром под складские задачи.",
   },
   {
-    img: "/photos/interior.jpg",
+    img: "/photos/obj-production.jpg",
     imgPos: "center" as const,
     tag: "Производство",
-    title: "Производственный пролёт",
-    text: "Несущий каркас и пролёт под технологическое оборудование.",
+    title: "Каркас под резервуары",
+    text: "Несущий каркас под технологическое оборудование и резервуары.",
   },
   {
     img: "/photos/obj-commercial.jpg",
