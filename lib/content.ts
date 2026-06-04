@@ -136,7 +136,7 @@ export const objectTypes = [
     title: "Складские комплексы",
     text: "Тёплые и холодные склады для хранения и логистики.",
     img: "/photos/obj-sklad.jpg",
-    imgPos: "center" as const,       // новый горизонтальный кадр — здание по центру
+    imgPos: "top" as const,         // ворота и здание сверху, низ — снег
   },
   {
     tag: "Ангары",
@@ -149,8 +149,8 @@ export const objectTypes = [
     tag: "Производство",
     title: "Производственные корпуса",
     text: "Цеха и здания под оборудование и технологические линии.",
-    img: "/photos/obj-production.jpg",
-    imgPos: "top" as const,         // здание сверху, низ — щебень
+    img: "/photos/interior.jpg",     // временно — внутри производственного пролёта
+    imgPos: "center" as const,       // ждём фото с резервуарами от владельца
   },
   {
     tag: "Коммерция",
@@ -279,17 +279,17 @@ export const objectTypesFull = [
 export const projects = [
   {
     img: "/photos/obj-sklad.jpg",
-    imgPos: "center" as const,
+    imgPos: "top" as const,
     tag: "Склад",
     title: "Складское здание",
     text: "Утеплённое каркасное здание с закрытым контуром под складские задачи.",
   },
   {
-    img: "/photos/obj-production.jpg",
-    imgPos: "top" as const,
+    img: "/photos/interior.jpg",
+    imgPos: "center" as const,
     tag: "Производство",
-    title: "Каркас под резервуары",
-    text: "Несущий каркас под технологическое оборудование и резервуары.",
+    title: "Производственный пролёт",
+    text: "Несущий каркас и пролёт под технологическое оборудование.",
   },
   {
     img: "/photos/obj-commercial.jpg",
