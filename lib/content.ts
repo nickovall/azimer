@@ -136,7 +136,7 @@ export const objectTypes = [
     title: "Складские комплексы",
     text: "Тёплые и холодные склады для хранения и логистики.",
     img: "/photos/obj-sklad.jpg",
-    imgPos: "top" as const,         // здание в верхней половине, низ — снег
+    imgPos: "center" as const,       // новый горизонтальный кадр — здание по центру
   },
   {
     tag: "Ангары",
@@ -156,7 +156,7 @@ export const objectTypes = [
     tag: "Коммерция",
     title: "Коммерческие здания",
     text: "Торговые, сервисные и административные объекты.",
-    img: "/photos/proc-frame.jpg",
+    img: "/photos/obj-commercial.jpg",   // реальный объект АЗИМЕР — зал со стульями
     imgPos: "center" as const,
   },
   {
@@ -279,7 +279,7 @@ export const objectTypesFull = [
 export const projects = [
   {
     img: "/photos/obj-sklad.jpg",
-    imgPos: "top" as const,
+    imgPos: "center" as const,
     tag: "Склад",
     title: "Складское здание",
     text: "Утеплённое каркасное здание с закрытым контуром под складские задачи.",
@@ -292,11 +292,11 @@ export const projects = [
     text: "Несущий каркас под технологическое оборудование и резервуары.",
   },
   {
-    img: "/photos/proc-frame.jpg",
+    img: "/photos/obj-commercial.jpg",
     imgPos: "center" as const,
     tag: "Коммерция",
-    title: "Каркас коммерческого объекта",
-    text: "Несущий металлокаркас под коммерческое здание — на этапе монтажа.",
+    title: "Коммерческий зал",
+    text: "Просторное помещение под мероприятия с отделкой и освещением.",
   },
   {
     img: "/photos/obj-angar.jpg",
