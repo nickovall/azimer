@@ -11,6 +11,8 @@ export const company = {
   vkHandle: "@mavlyanov2018",
   vkProfileHref: "https://vk.com/mavlyanov2018",
   vkChatHref: "https://vk.me/mavlyanov2018",
+  email: "azimer_sk@mail.ru",
+  emailHref: "mailto:azimer_sk@mail.ru",
   siteHref: "https://azimer.ru/",
   qrSiteHref: "https://azimer.ru/",
   legalAddress: "660020, Красноярский край, г. Красноярск, ул. Караульная, д. 88, офис 9-21",
@@ -292,66 +294,83 @@ export const objectTypesFull = [
   },
 ];
 
-export const projects = [
+// Project case card — все доказательные поля опциональны.
+// Не выдумывать region/size/scope/year. Карточка рендерит только подтверждённые
+// факты; недостающие поля заменяются явным «данные уточняются».
+export type ProjectCase = {
+  img: string;
+  imgPos?: "top" | "center" | "bottom" | "left" | "right";
+  tag: string;
+  title: string;
+  text: string;
+  region?: string;       // например «Красноярский край»
+  size?: string;         // например «18 × 36 м»
+  area?: string;         // например «1200 м²»
+  scope?: string[];      // например ["Проект", "Изготовление", "Монтаж"]
+  status?: string;       // например «Сдан 2024»
+  highlight?: string;    // одна короткая особенность
+};
+
+export const projects: ProjectCase[] = [
   {
     img: "/photos/obj-sklad.jpg",
-    imgPos: "top" as const,
+    imgPos: "top",
     tag: "Склад",
     title: "Складское здание",
     text: "Утеплённое каркасное здание с закрытым контуром под складские задачи.",
   },
   {
     img: "/photos/obj-production.jpg",
-    imgPos: "center" as const,
+    imgPos: "center",
     tag: "Производство",
     title: "Каркас под резервуары",
     text: "Несущий каркас под технологическое оборудование и резервуары.",
   },
   {
     img: "/photos/obj-commercial.jpg",
-    imgPos: "center" as const,
+    imgPos: "center",
     tag: "Коммерция",
     title: "Коммерческий зал",
     text: "Просторное помещение под мероприятия с отделкой и освещением.",
   },
   {
     img: "/photos/obj-angar.jpg",
-    imgPos: "center" as const,
+    imgPos: "center",
     tag: "Ангар",
     title: "Каркас с зашивкой",
     text: "Монтаж каркаса с зашивкой стен сэндвич-панелями.",
   },
   {
     img: "/photos/proc-roof.jpg",
-    imgPos: "top" as const,
+    imgPos: "top",
     tag: "Модули",
     title: "Модульный блок (сборка)",
     text: "Внутренний монтаж модульного блок-контейнера — утепление и каркас перегородок.",
   },
   {
     img: "/photos/interior.jpg",
-    imgPos: "center" as const,
+    imgPos: "center",
     tag: "Производство",
     title: "Производственный корпус",
     text: "Каркасное здание с закрытым контуром под производство.",
   },
   {
     img: "/photos/proc-frame.jpg",
-    imgPos: "center" as const,
+    imgPos: "center",
     tag: "Монтаж",
     title: "Монтаж металлокаркаса",
     text: "Сборка несущего каркаса с применением спецтехники.",
   },
   {
     img: "/photos/proc-welding.jpg",
-    imgPos: "center" as const,
+    imgPos: "center",
     tag: "Конструкции",
     title: "Технические сооружения",
     text: "Изготовление и монтаж нестандартных металлоконструкций.",
   },
   {
     img: "/photos/proc-roof.jpg",
-    imgPos: "top" as const,
+    imgPos: "top",
     tag: "Кровля",
     title: "Кровельные работы",
     text: "Монтаж кровли и закрытие контура здания.",

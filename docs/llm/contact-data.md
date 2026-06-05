@@ -12,6 +12,8 @@ Use this file for public contact UI, CTA blocks, and KP/PDF contact actions.
 - VK handle: `@mavlyanov2018`
 - VK profile URL: `https://vk.com/mavlyanov2018`
 - VK chat URL: `https://vk.me/mavlyanov2018`
+- Email: `azimer_sk@mail.ru` (approved 2026-06-05)
+- Email href: `mailto:azimer_sk@mail.ru`
 
 ## QR Target
 

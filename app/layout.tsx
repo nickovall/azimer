@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { Inter, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import SmoothScroll from "@/components/SmoothScroll";
-import Preloader from "@/components/Preloader";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import MobileStickyCta from "@/components/MobileStickyCta";
 import Analytics from "@/components/Analytics";
 
 const inter = Inter({
@@ -97,12 +97,12 @@ export default function RootLayout({
     <html lang="ru" className={`${inter.variable} ${plexMono.variable}`}>
       <body className="min-h-screen">
         <Analytics />
-        <Preloader />
         <SmoothScroll>
           <Header />
           <main>{children}</main>
           <Footer />
         </SmoothScroll>
+        <MobileStickyCta />
       </body>
     </html>
   );

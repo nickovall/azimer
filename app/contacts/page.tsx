@@ -4,11 +4,12 @@ import Container from "@/components/ui/Container";
 import Label from "@/components/ui/Label";
 import Reveal from "@/components/ui/Reveal";
 import ContactForm from "@/components/ContactForm";
+import { company } from "@/lib/content";
 
 export const metadata: Metadata = {
   title: "Контакты — АЗИМЕР",
   description:
-    "Связаться с ООО «АЗИМЕР» — каркасное строительство в Красноярске. Оставьте заявку на расчёт объекта.",
+    "Связаться с ООО «АЗИМЕР» — каркасное строительство в Красноярске. Телефон, VK-чат и заявка на расчёт объекта.",
 };
 
 const info = [
@@ -23,7 +24,7 @@ export default function ContactsPage() {
       <PageHero
         crumb="Контакты"
         title="Связаться с АЗИМЕР"
-        subtitle="Оставьте заявку — уточним детали по объекту, обсудим задачу и подготовим предварительный расчёт."
+        subtitle="Позвоните, напишите в VK или оставьте заявку — уточним детали по объекту и подготовим предварительный расчёт."
       />
 
       <section className="bg-light py-24 md:py-32">
@@ -33,12 +34,89 @@ export default function ContactsPage() {
               <Reveal>
                 <Label>Контакты</Label>
                 <h2 className="mt-6 text-3xl font-extrabold leading-[1.1] tracking-[-0.02em] text-graphite-900 md:text-4xl">
-                  Оставьте заявку — свяжемся
+                  Как связаться
                 </h2>
                 <p className="mt-5 text-base leading-relaxed text-graphite-900/70">
-                  Основной способ связи — заявка через сайт. Опишите объект, и
-                  мы свяжемся, чтобы уточнить детали и подготовить расчёт.
+                  Прямой телефон менеджера и VK-чат — для быстрых вопросов.
+                  Заявка через форму — если нужно подготовить расчёт по объекту.
                 </p>
+              </Reveal>
+
+              {/* Quick actions */}
+              <Reveal delay={0.06}>
+                <div className="mt-8 grid gap-3 sm:grid-cols-2">
+                  {company.phoneHref && company.phoneLabel ? (
+                    <a
+                      href={company.phoneHref}
+                      className="group rounded-xl border border-line bg-white p-5 transition-colors hover:border-orange"
+                    >
+                      <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-graphite-900/50">
+                        Позвонить
+                      </p>
+                      <p className="mt-2 text-lg font-bold text-graphite-900 group-hover:text-orange">
+                        {company.phoneLabel}
+                      </p>
+                      {company.contactPerson ? (
+                        <p className="mt-1 text-xs text-graphite-900/55">
+                          {company.contactPerson}, менеджер
+                        </p>
+                      ) : null}
+                    </a>
+                  ) : null}
+
+                  {company.vkChatHref ? (
+                    <a
+                      href={company.vkChatHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group rounded-xl border border-line bg-white p-5 transition-colors hover:border-orange"
+                    >
+                      <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-graphite-900/50">
+                        Написать
+                      </p>
+                      <p className="mt-2 text-lg font-bold text-graphite-900 group-hover:text-orange">
+                        VK-чат
+                      </p>
+                      {company.vkHandle ? (
+                        <p className="mt-1 text-xs text-graphite-900/55">
+                          {company.vkHandle}
+                        </p>
+                      ) : null}
+                    </a>
+                  ) : null}
+
+                  {company.emailHref && company.email ? (
+                    <a
+                      href={company.emailHref}
+                      className="group rounded-xl border border-line bg-white p-5 transition-colors hover:border-orange sm:col-span-2"
+                    >
+                      <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-graphite-900/50">
+                        Email
+                      </p>
+                      <p className="mt-2 break-all text-lg font-bold text-graphite-900 group-hover:text-orange">
+                        {company.email}
+                      </p>
+                      <p className="mt-1 text-xs text-graphite-900/55">
+                        Для документов и КП
+                      </p>
+                    </a>
+                  ) : null}
+
+                  <a
+                    href="/estimate"
+                    className="group rounded-xl border border-line bg-white p-5 transition-colors hover:border-orange sm:col-span-2"
+                  >
+                    <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-graphite-900/50">
+                      Заявка на расчёт
+                    </p>
+                    <p className="mt-2 text-lg font-bold text-graphite-900 group-hover:text-orange">
+                      Получить предварительную оценку →
+                    </p>
+                    <p className="mt-1 text-xs text-graphite-900/55">
+                      3–5 минут на параметры объекта
+                    </p>
+                  </a>
+                </div>
               </Reveal>
 
               <div className="mt-9 border-y border-line">
@@ -59,10 +137,15 @@ export default function ContactsPage() {
               </div>
 
               <Reveal delay={0.32}>
-                <p className="mt-6 text-xs leading-relaxed text-graphite-900/45">
-                  Прямые контакты — телефон и мессенджеры — добавим после
-                  согласования.
-                </p>
+                <div className="mt-8 space-y-2 text-xs leading-relaxed text-graphite-900/55">
+                  <p className="font-semibold text-graphite-900/80">
+                    {company.legalName}
+                  </p>
+                  {company.legalAddress ? <p>{company.legalAddress}</p> : null}
+                  <p className="font-mono uppercase tracking-[0.12em] text-graphite-900/55">
+                    ИНН {company.inn} · ОГРН {company.ogrn}
+                  </p>
+                </div>
               </Reveal>
             </div>
 

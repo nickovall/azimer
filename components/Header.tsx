@@ -6,7 +6,7 @@ import { useLenis } from "lenis/react";
 import { motion } from "framer-motion";
 import Container from "./ui/Container";
 import Logo from "./ui/Logo";
-import { nav } from "@/lib/content";
+import { company, nav } from "@/lib/content";
 
 export default function Header() {
   const [scrolled, setScrolled] = useState(false);
@@ -55,6 +55,16 @@ export default function Header() {
           </nav>
 
           <div className="flex items-center gap-3">
+            {company.phoneHref && company.phoneLabel ? (
+              <a
+                href={company.phoneHref}
+                className="hidden text-sm font-semibold text-graphite-900 transition-colors hover:text-orange xl:inline-flex"
+                aria-label={`Позвонить ${company.phoneLabel}`}
+              >
+                {company.phoneLabel}
+              </a>
+            ) : null}
+
             <Link
               href="/estimate"
               className="hidden rounded-full bg-orange px-6 py-3 text-sm font-semibold text-white transition-all duration-300 hover:bg-orange-bright hover:-translate-y-0.5 sm:inline-flex"
@@ -109,6 +119,30 @@ export default function Header() {
                 {item.label}
               </Link>
             ))}
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {company.phoneHref && company.phoneLabel ? (
+                <a
+                  href={company.phoneHref}
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center justify-center gap-2 rounded-full border border-graphite-900/15 px-5 py-3 text-sm font-semibold text-graphite-900"
+                >
+                  Позвонить
+                </a>
+              ) : null}
+              {company.vkChatHref ? (
+                <a
+                  href={company.vkChatHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center justify-center gap-2 rounded-full border border-graphite-900/15 px-5 py-3 text-sm font-semibold text-graphite-900"
+                >
+                  Написать в VK
+                </a>
+              ) : null}
+            </div>
+
             <Link
               href="/estimate"
               onClick={() => setMenuOpen(false)}

@@ -43,8 +43,39 @@ export default function Footer() {
               Контакты
             </p>
             <ul className="mt-5 space-y-3 text-sm text-light/70">
+              {company.phoneHref && company.phoneLabel ? (
+                <li>
+                  <a
+                    href={company.phoneHref}
+                    className="font-semibold text-light transition-colors hover:text-orange"
+                  >
+                    {company.phoneLabel}
+                  </a>
+                </li>
+              ) : null}
+              {company.vkChatHref ? (
+                <li>
+                  <a
+                    href={company.vkChatHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="transition-colors hover:text-orange"
+                  >
+                    Написать в VK{company.vkHandle ? ` (${company.vkHandle})` : ""}
+                  </a>
+                </li>
+              ) : null}
+              {company.emailHref && company.email ? (
+                <li>
+                  <a
+                    href={company.emailHref}
+                    className="break-all transition-colors hover:text-orange"
+                  >
+                    {company.email}
+                  </a>
+                </li>
+              ) : null}
               <li>{company.city}</li>
-              <li>Работаем с юрлицами, ИП и частными заказчиками</li>
               <li>
                 <Link
                   href="/estimate"
@@ -54,6 +85,10 @@ export default function Footer() {
                 </Link>
               </li>
             </ul>
+
+            <p className="mt-6 font-mono text-[11px] uppercase leading-relaxed tracking-[0.14em] text-light/35">
+              ИНН {company.inn} · ОГРН {company.ogrn}
+            </p>
           </div>
         </div>
 
@@ -66,6 +101,9 @@ export default function Footer() {
           </span>
         </div>
       </Container>
+
+      {/* Спейсер под mobile sticky CTA, чтобы не перекрывался последний ряд. */}
+      <div className="h-[72px] lg:hidden" aria-hidden />
     </footer>
   );
 }
