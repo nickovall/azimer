@@ -1,10 +1,11 @@
 image: node:20-alpine
 
 stages:
-  - deploy
+  - pages
+  - edge_functions
 
 pages:
-  stage: deploy
+  stage: pages
   variables:
     NEXT_PUBLIC_SUPABASE_URL: https://objgpsjyftdrhafapwvw.supabase.co
     NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9iamdwc2p5ZnRkcmhhZmFwd3Z3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1NzMyNTUsImV4cCI6MjA5NTE0OTI1NX0.G3SjDMrYLhRPw_WboewcBMvBunMx89TS9X_mAlkvdXw
@@ -21,15 +22,25 @@ pages:
     - npm run test:calculator
     - npm run typecheck
     - npm run build
-    # После build сайта — собираем bundle калькулятора для бота и автодеплоим
-    # Edge Functions, чтобы бот, админка и сайт оставались синхронизированы.
-    - npm run build:bot-bundle
-    - npx supabase functions deploy telegram-bot --no-verify-jwt --project-ref objgpsjyftdrhafapwvw
-    - npx supabase functions deploy admin-api --no-verify-jwt --project-ref objgpsjyftdrhafapwvw
     - rm -rf public
     - mv out public
   artifacts:
     paths:
       - public
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+edge_functions:
+  stage: edge_functions
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - node_modules/
+  script:
+    - npm ci --prefer-offline --no-audit
+    - npm run build:bot-bundle
+    - npx supabase functions deploy telegram-bot admin-api --no-verify-jwt --project-ref objgpsjyftdrhafapwvw
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $SUPABASE_ACCESS_TOKEN'
