@@ -12,7 +12,11 @@ const SUPABASE_URL    = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY     = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const ADMIN_PASSWORD  = Deno.env.get("ADMIN_PASSWORD") ?? "";
 const SITE_URL        = Deno.env.get("SITE_URL") ?? "https://azimer.ru";
-const ADMIN_SESSION_SECRET = Deno.env.get("ADMIN_SESSION_SECRET") ?? ADMIN_PASSWORD;
+// Должен быть отдельный секрет, не равный паролю.
+// Fallback на ADMIN_PASSWORD убран сознательно: иначе компрометация пароля
+// = компрометация подписи всех живых сессий, и rotate пароля молча
+// инвалидирует токены вместо явного rotate секрета.
+const ADMIN_SESSION_SECRET = Deno.env.get("ADMIN_SESSION_SECRET") ?? "";
 const ADMIN_TOKEN_TTL_SECONDS = Math.max(60, Math.min(
   Number(Deno.env.get("ADMIN_TOKEN_TTL_SECONDS") ?? 30 * 60),
   8 * 60 * 60,
@@ -292,9 +296,12 @@ Deno.serve(async (req) => {
         fileLinks.push({ path: f, url: f });
         continue;
       }
+      // 5 минут — админ просмотр в активной сессии. Длинный TTL значит,
+      // что случайно расшаренная/скриншотнутая ссылка остаётся читабельной
+      // вне сессии. Если нужно скачать после паузы — повторно жмём «обновить».
       const { data: signed } = await sb.storage
         .from("lead-files")
-        .createSignedUrl(path, 60 * 60); // 1h
+        .createSignedUrl(path, 5 * 60);
       fileLinks.push({ path, url: signed?.signedUrl ?? null });
     }
 

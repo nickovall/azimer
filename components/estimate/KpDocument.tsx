@@ -125,10 +125,19 @@ const styles = StyleSheet.create({
     borderTopColor: LINE,
     paddingTop: 10,
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
     fontSize: 8,
     color: "#9A9A98",
   },
+  footerText: { flexDirection: "column", flexGrow: 1 },
+  footerQrWrap: {
+    flexDirection: "column",
+    alignItems: "center",
+    marginLeft: 16,
+  },
+  footerQr: { width: 44, height: 44 },
+  footerQrLabel: { fontSize: 6.5, marginTop: 2, color: "#9A9A98", letterSpacing: 0.6 },
 });
 
 const labelOf = (
@@ -242,8 +251,14 @@ export default function KpDocument({
 
         {/* Footer */}
         <View style={styles.footer} fixed>
-          <Text>ООО «АЗИМЕР» · Каркасные здания под ключ</Text>
-          <Text>Красноярск</Text>
+          <View style={styles.footerText}>
+            <Text>ООО «АЗИМЕР» · Каркасные здания под ключ</Text>
+            <Text>Красноярск · ИНН 2466294494 · azimer.ru</Text>
+          </View>
+          <View style={styles.footerQrWrap}>
+            <Image src="/qr-azimer-site.png" style={styles.footerQr} />
+            <Text style={styles.footerQrLabel}>AZIMER.RU</Text>
+          </View>
         </View>
       </Page>
     </Document>

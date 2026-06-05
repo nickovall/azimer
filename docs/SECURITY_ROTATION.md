@@ -38,7 +38,9 @@ their backing policies or project configuration were also compromised.
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `ADMIN_PASSWORD`
-- `ADMIN_SESSION_SECRET`
+- `ADMIN_SESSION_SECRET` — must be set independently and must not equal
+  `ADMIN_PASSWORD`. If missing, login and all admin actions return 401
+  (fail closed).
 - `SITE_URL`
 - `ADMIN_ALLOWED_ORIGINS` if additional non-local origins are needed
 - `GITLAB_TRIGGER_TOKEN`

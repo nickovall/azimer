@@ -294,10 +294,25 @@ export default function KpPage() {
           </a>
         </div>
 
-        {/* ─────────── Подпись ─────────── */}
-        <div className="mt-10 border-t border-line pt-6 text-center text-xs text-graphite-900/40">
-          <p>ООО «АЗИМЕР» · ИНН 2466294494 · ОГРН 1232400004242 · Красноярск</p>
-          <p className="mt-1">azimer.ru · Расчёт: {new Date(estimate.calculatedAt).toLocaleString("ru-RU")}</p>
+        {/* ─────────── Подпись + QR на сайт ─────────── */}
+        <div className="mt-10 flex items-center justify-between gap-6 border-t border-line pt-6 text-xs text-graphite-900/40">
+          <div className="text-left">
+            <p>ООО «АЗИМЕР» · ИНН 2466294494 · ОГРН 1232400004242 · Красноярск</p>
+            <p className="mt-1">azimer.ru · Расчёт: {new Date(estimate.calculatedAt).toLocaleString("ru-RU")}</p>
+          </div>
+          <div className="flex shrink-0 flex-col items-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/qr-azimer-site.png"
+              alt="QR на сайт АЗИМЕР"
+              width={72}
+              height={72}
+              className="rounded-md"
+            />
+            <span className="mt-1 font-mono text-[9px] uppercase tracking-[0.14em]">
+              azimer.ru
+            </span>
+          </div>
         </div>
       </Container>
     </div>
