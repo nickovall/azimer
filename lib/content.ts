@@ -2,8 +2,24 @@
 
 export const company = {
   legalName: "ООО «АЗИМЕР»",
+  fullLegalName: "ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ «АЗИМЕР»",
   name: "АЗИМЕР",
   city: "Красноярск",
+  contactPerson: "Азамат Мавлянов",
+  phoneLabel: "+7 901 600-05-65",
+  phoneHref: "tel:+79016000565",
+  vkHandle: "@mavlyanov2018",
+  vkProfileHref: "https://vk.com/mavlyanov2018",
+  vkChatHref: "https://vk.me/mavlyanov2018",
+  siteHref: "https://azimer.ru/",
+  qrSiteHref: "https://azimer.ru/",
+  legalAddress: "660020, Красноярский край, г. Красноярск, ул. Караульная, д. 88, офис 9-21",
+  inn: "2466294494",
+  kpp: "246601001",
+  ogrn: "1232400004242",
+  registrationDate: "17.02.2023",
+  director: "Мавлянов Азамат Хикматуллоевич",
+  mainOkved: "43.91 Производство кровельных работ",
   tagline: "Каркасные здания под ключ",
 };
 
@@ -409,54 +425,3 @@ export const audiences = [
 ];
 
 export const clientTypes = ["Частное лицо", "Компания или ИП"];
-
-export const testimonials = [
-  {
-    slug: "kokorin",
-    company: "ИП Кокорин",
-    excerpt:
-      "Положительно оценили работу по строительству модульного дома в п. Емельяново — оперативность, качество и применение новых технологий.",
-    pdf: "/letters/kokorin.pdf",
-    thumb: "/letters/thumbs/kokorin.jpg",
-  },
-  {
-    slug: "metall-invest",
-    company: "ООО «Металл-Инвест»",
-    excerpt:
-      "Отделочные работы кабинета в БЦ «Дубль» — быстро и качественно. Надёжность, оперативность, соблюдение обязательств.",
-    pdf: "/letters/metall-invest.pdf",
-    thumb: "/letters/thumbs/metall-invest.jpg",
-  },
-  {
-    slug: "mk-reshenie",
-    company: "ООО «МК Решение»",
-    excerpt:
-      "Строительство теплотрассы в Академгородке — большой объём работ, позволил увеличить производственные мощности.",
-    pdf: "/letters/mk-reshenie.pdf",
-    thumb: "/letters/thumbs/mk-reshenie.jpg",
-  },
-  {
-    slug: "mppm",
-    company: "МППМ",
-    excerpt:
-      "Ремонт офисного пространства и реставрация коммуникаций. Профессиональный подход, оперативность, готовность слышать заказчика.",
-    pdf: "/letters/mppm.pdf",
-    thumb: "/letters/thumbs/mppm.jpg",
-  },
-  {
-    slug: "blk",
-    company: "ООО «БЛК»",
-    excerpt:
-      "Организация работ по поставке строительно-отделочных материалов. Профессионализм, гибкость и оперативность сотрудников.",
-    pdf: "/letters/blk.pdf",
-    thumb: "/letters/thumbs/blk.jpg",
-  },
-  {
-    slug: "s-materials",
-    company: "ООО «С-Материалс»",
-    excerpt:
-      "Высокое качество и организованная работа при отделочных и ремонтных работах в офисе.",
-    pdf: "/letters/s-materials.pdf",
-    thumb: "/letters/thumbs/s-materials.jpg",
-  },
-];

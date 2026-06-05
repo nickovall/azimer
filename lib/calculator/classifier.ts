@@ -2,7 +2,7 @@
 // Определяет: типовой / расширенный / нужен инженер
 
 import type { BuildingInput, Complexity, ComplexityFlag } from "./types";
-import { getRegion } from "./regions";
+import { getRegion, REGIONS } from "./regions";
 
 export interface Classification {
   complexity: Complexity;
@@ -18,12 +18,32 @@ const BLOCKING_FLAGS: ComplexityFlag[] = [
   "high_seismic",      // 8+ баллов
   "permafrost",        // мерзлота — только после геологии/оснований
   "tall_rack",         // стеллажи > 10м — особый расчёт пола и нагрузок
+  "very_large_object", // крупные габариты требуют ручной КМ/КЖ проверки
+  "unsupported_region",
+  "non_standard_envelope",
 ];
 
 export function classify(input: BuildingInput): Classification {
   const flags: ComplexityFlag[] = [];
   const reasons: string[] = [];
   const region = getRegion(input.region);
+  const regionKnown = !input.region || REGIONS.some((r) => r.id === input.region);
+
+  if (!regionKnown || input.region === "other") {
+    flags.push("unsupported_region");
+    reasons.push("Регион не задан в справочнике — нужны фактические снег/ветер/сейсмика по площадке");
+  }
+
+  if (input.objectType === "tent_arched") {
+    flags.push("non_standard_envelope");
+    reasons.push("Арочный тент-каркас требует отдельной проверки оболочки, анкеровки и ветровых нагрузок");
+  }
+
+  const floorArea = input.length * input.width;
+  if (floorArea > 3000 || input.length > 120 || input.width > 60) {
+    flags.push("very_large_object");
+    reasons.push(`Крупный объект ${Math.round(floorArea)}м² — нужен индивидуальный расчёт схемы каркаса`);
+  }
 
   // Пролёт — если ширина больше 12м И только 1 пролёт
   const spanCount = input.spanCount ?? 1;

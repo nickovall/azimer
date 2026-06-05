@@ -2,7 +2,7 @@
 // Обрабатывает callback-кнопки (смена статуса заявки) и команды (/leads, /stats, /kp, /help).
 //
 // Деплой: supabase functions deploy telegram-bot --no-verify-jwt
-// Env:    supabase secrets set TELEGRAM_BOT_TOKEN=... TELEGRAM_WEBHOOK_SECRET=... ALLOWED_CHAT_IDS=8614558675,123456
+// Env:    supabase secrets set TELEGRAM_BOT_TOKEN=... TELEGRAM_WEBHOOK_SECRET=... ADMIN_CHAT_IDS=<chat_id_1>,<chat_id_2>
 // Webhook: curl https://api.telegram.org/bot<TOKEN>/setWebhook \
 //            -d url=https://<ref>.supabase.co/functions/v1/telegram-bot \
 //            -d secret_token=<SECRET>
@@ -393,12 +393,14 @@ function formatSummary(c: Collected): string {
 
 const BOT_TOKEN        = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
 const WEBHOOK_SECRET   = Deno.env.get("TELEGRAM_WEBHOOK_SECRET") ?? "";
-const ALLOWED_CHAT_IDS = (Deno.env.get("ALLOWED_CHAT_IDS") ?? "")
+const ADMIN_CHAT_IDS = (Deno.env.get("ADMIN_CHAT_IDS") ?? Deno.env.get("ALLOWED_CHAT_IDS") ?? "")
   .split(",")
   .map((x) => Number(x.trim()))
   .filter(Boolean);
 const SUPABASE_URL  = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY   = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const RUNTIME_ENV = (Deno.env.get("ENVIRONMENT") ?? Deno.env.get("DENO_ENV") ?? "production").toLowerCase();
+const IS_PRODUCTION = RUNTIME_ENV !== "development" && RUNTIME_ENV !== "local";
 
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
   auth: { persistSession: false },
@@ -421,6 +423,7 @@ const SOURCE_LABEL: Record<string, string> = {
   project:  "📐 Готовый проект",
   partner:  "🤝 Партнёрство",
   estimate: "🧮 Мастер расчёта",
+  kp_bot:   "🤖 КП из Telegram",
 };
 
 function leadButtons(leadId: string) {
@@ -438,8 +441,17 @@ function leadButtons(leadId: string) {
   };
 }
 
-function isAllowed(chatId: number) {
-  return ALLOWED_CHAT_IDS.length === 0 || ALLOWED_CHAT_IDS.includes(chatId);
+function isAdminChat(chatId: number) {
+  return ADMIN_CHAT_IDS.includes(chatId);
+}
+
+function configErrors(): string[] {
+  const errors: string[] = [];
+  if (!BOT_TOKEN) errors.push("TELEGRAM_BOT_TOKEN is missing");
+  if (!SUPABASE_URL) errors.push("SUPABASE_URL is missing");
+  if (!SERVICE_KEY) errors.push("SUPABASE_SERVICE_ROLE_KEY is missing");
+  if (IS_PRODUCTION && !WEBHOOK_SECRET) errors.push("TELEGRAM_WEBHOOK_SECRET is required in production");
+  return errors;
 }
 
 async function tg(method: string, payload: Record<string, unknown>) {
@@ -516,16 +528,16 @@ function formatLeadCard(lead: any) {
 async function handleCallback(cb: any) {
   const chatId = cb.message.chat.id;
   const msgId  = cb.message.message_id;
-  if (!isAllowed(chatId)) {
-    await answerCallback(cb.id, "🚫 Доступ запрещён");
-    return;
-  }
-
   const data = cb.data as string;
 
   // Wizard callbacks (w:field:value)
   if (data.startsWith("w:")) {
     await handleWizardCallback(cb);
+    return;
+  }
+
+  if (!isAdminChat(chatId)) {
+    await answerCallback(cb.id, "🚫 Это действие доступно только администратору");
     return;
   }
 
@@ -558,13 +570,18 @@ async function handleCallback(cb: any) {
   await answerCallback(cb.id, `Статус: ${STATUS_LABEL[newStatus] ?? newStatus}`);
 }
 
+async function sendPublicHelp(chatId: number) {
+  await sendMessage(chatId,
+    `<b>АЗИМЕР — анкета для расчёта здания</b>\n\n` +
+    `Я помогу собрать параметры объекта и подготовить предварительное КП.\n\n` +
+    `<code>/kp_new</code> — начать анкету\n` +
+    `<code>/cancel</code> — отменить текущую анкету\n\n` +
+    `После отправки анкеты менеджер АЗИМЕР проверит данные и свяжется с вами.`
+  );
+}
+
 async function handleCommand(msg: any) {
   const chatId = msg.chat.id;
-  if (!isAllowed(chatId)) {
-    await sendMessage(chatId, `🚫 Доступ запрещён. Твой chat_id: <code>${chatId}</code>`);
-    return;
-  }
-
   let [cmd, ...args] = (msg.text as string).split(/\s+/);
 
   // Алиасы для меню BotFather (без пробелов)
@@ -584,6 +601,38 @@ async function handleCommand(msg: any) {
   cmd = cmd.split("@")[0];
   if (aliases[cmd]) {
     [cmd, args] = aliases[cmd];
+  }
+
+  const isAdmin = isAdminChat(chatId);
+  const adminCommands = new Set(["/leads", "/find", "/stats", "/kp"]);
+
+  if (!isAdmin && (cmd === "/start" || cmd === "/help")) {
+    await sendPublicHelp(chatId);
+    return;
+  }
+
+  if (cmd === "/kp_new") {
+    await startWizard(chatId);
+    return;
+  }
+
+  if (cmd === "/cancel") {
+    const cancelled = await cancelWizard(chatId);
+    await sendMessage(chatId,
+      cancelled
+        ? "❌ Сессия КП отменена."
+        : "У тебя нет активной сессии. /kp_new — начать новую."
+    );
+    return;
+  }
+
+  if (!isAdmin) {
+    await sendMessage(chatId,
+      adminCommands.has(cmd)
+        ? `🚫 Эта команда доступна только администратору. Для анкеты используй <code>/kp_new</code>.`
+        : `Команда <code>${cmd}</code> неизвестна. Для анкеты используй <code>/kp_new</code>.`
+    );
+    return;
   }
 
   if (cmd === "/start" || cmd === "/help") {
@@ -723,21 +772,6 @@ async function handleCommand(msg: any) {
     return;
   }
 
-  if (cmd === "/kp_new") {
-    await startWizard(chatId);
-    return;
-  }
-
-  if (cmd === "/cancel") {
-    const cancelled = await cancelWizard(chatId);
-    await sendMessage(chatId,
-      cancelled
-        ? "❌ Сессия КП отменена."
-        : "У тебя нет активной сессии. /kp_new — начать новую."
-    );
-    return;
-  }
-
   // /kp оставлен как скрытая команда — для поиска заявки по точному ID
   // (полезно когда обсуждаешь заявку в другом канале). В меню BotFather не выносим.
   if (cmd === "/kp") {
@@ -764,6 +798,12 @@ async function handleCommand(msg: any) {
 // ─────────────────────────── entry ───────────────────────────
 
 Deno.serve(async (req) => {
+  const errors = configErrors();
+  if (errors.length > 0) {
+    console.error("telegram-bot configuration error:", errors.join("; "));
+    return new Response("configuration error: " + errors.join("; "), { status: 503 });
+  }
+
   // Защита от не-Telegram запросов через secret_token (Telegram добавляет этот заголовок)
   if (WEBHOOK_SECRET) {
     const got = req.headers.get("x-telegram-bot-api-secret-token");
@@ -784,7 +824,7 @@ Deno.serve(async (req) => {
       // Если есть активная wizard-сессия и это НЕ команда — пускаем в wizard
       if (!text.startsWith("/")) {
         const chatId = update.message.chat.id;
-        const handled = isAllowed(chatId) ? await handleWizardText(chatId, text) : false;
+        const handled = await handleWizardText(chatId, text);
         if (!handled) {
           // Свободное сообщение без активной сессии — игнорируем (пока)
         }
@@ -921,7 +961,7 @@ async function handleWizardText(chatId: number, text: string): Promise<boolean> 
         await sendMessage(chatId, "Не похоже на телефон. Пример: <code>+79991234567</code>");
         return true;
       }
-      await saveAndAdvance(chatId, session, "phone", p, "object_type");
+      await saveAndAdvance(chatId, session, "phone", p, "region");
       return true;
     }
     case "length":
@@ -1063,11 +1103,13 @@ async function finalizeKpAndCreateLead(chatId: number, session: any) {
   const estimateData = {
     state: {
       objectType: c.object_type,
+      region: c.region,
       frame: c.frame,
       length: c.length,
       width:  c.width,
       height: c.height,
       cladding:   c.cladding,
+      claddingThk: c.cladding_thk,
       roofing:    c.roofing,
       foundation: c.foundation,
       options: {
@@ -1082,6 +1124,8 @@ async function finalizeKpAndCreateLead(chatId: number, session: any) {
     base:     estimate.total,
     low:      estimate.low,
     high:     estimate.high,
+    catalogVersion: CATALOG_VERSION,
+    kpMode: "current-recalc",
   };
 
   const noteParts: string[] = [];
@@ -1172,6 +1216,9 @@ function buildKpUrl(c: Collected, leadId: string): string {
     input,
     client: { name: c.client_name, phone: c.phone },
     leadId,
+    catalogVersion: CATALOG_VERSION,
+    issuedAt: new Date().toISOString(),
+    mode: "current-recalc",
   };
   const json = JSON.stringify(payload);
   // Base64 UTF-8 (TextEncoder универсально работает в Deno)

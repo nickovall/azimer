@@ -5,6 +5,8 @@
   "scripts": {
     "gen:catalog": "tsx scripts/build-catalog.mts",
     "build:bot-bundle": "tsx scripts/build-bot-bundle.mts",
+    "test:calculator": "tsx tests/scripts/calculator-edge-cases.mts",
+    "typecheck": "tsc --noEmit",
     "deploy:bot": "tsx scripts/build-catalog.mts && tsx scripts/build-bot-bundle.mts && supabase functions deploy telegram-bot --no-verify-jwt",
     "predev": "tsx scripts/build-catalog.mts",
     "prebuild": "tsx scripts/build-catalog.mts",

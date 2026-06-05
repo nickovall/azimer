@@ -15,7 +15,7 @@ import {
 } from "@/lib/admin-api";
 
 export default function AdminDashboardPage() {
-  const { password } = useAdmin();
+  const { token } = useAdmin();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -23,12 +23,12 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    adminFetch<{ ok: true; stats: DashboardStats }>(password, { action: "dashboard_stats" })
+    adminFetch<{ ok: true; stats: DashboardStats }>(token, { action: "dashboard_stats" })
       .then((r) => { if (!cancelled) setStats(r.stats); })
       .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [password]);
+  }, [token]);
 
   if (loading) {
     return <p className="py-16 text-center text-graphite-900/40">Загружаем статистику…</p>;

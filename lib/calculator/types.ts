@@ -115,7 +115,10 @@ export type ComplexityFlag =
   | "high_seismic"        // 8+ баллов
   | "permafrost"          // вечная мерзлота
   | "heavy_insulation"   // сэндвич > 200мм
-  | "tall_rack";          // стеллажи > 6м
+  | "tall_rack"           // стеллажи > 6м
+  | "very_large_object"   // площадь/габариты выходят за типовой быстрый расчёт
+  | "unsupported_region"  // регион не задан в справочнике или выбран как "другое"
+  | "non_standard_envelope"; // тент/нестандартная оболочка требует ручной проверки
 
 export type Complexity = "TYPICAL" | "EXTENDED" | "ENGINEER_REQUIRED";
 

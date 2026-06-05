@@ -18,6 +18,8 @@ import { calculateOpenings }   from "./modules/openings";
 const ECONOMY_TENT_MULTIPLIER = 0.33;
 
 export function calculate(input: BuildingInput): Estimate {
+  validateInput(input);
+
   // 0. Подставляем параметры региона в Input (если не заданы явно)
   const region = getRegion(input.region);
   const enrichedInput: BuildingInput = {
@@ -98,6 +100,30 @@ export function calculate(input: BuildingInput): Estimate {
     catalogVersion: CATALOG_VERSION,
     calculatedAt:   new Date().toISOString(),
   };
+}
+
+function validateInput(input: BuildingInput): void {
+  const positiveFields: Array<[string, number]> = [
+    ["length", input.length],
+    ["width", input.width],
+    ["height", input.height],
+  ];
+  for (const [name, value] of positiveFields) {
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new Error(`${name} must be a positive number`);
+    }
+  }
+
+  const nonNegativeCounts: Array<[string, number]> = [
+    ...((input.gates ?? []).map((g, i) => [`gates[${i}].count`, g.count] as [string, number])),
+    ...((input.windows ?? []).map((w, i) => [`windows[${i}].count`, w.count] as [string, number])),
+    ["doors.count", input.doors?.count ?? 0],
+  ];
+  for (const [name, value] of nonNegativeCounts) {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new Error(`${name} must be a non-negative number`);
+    }
+  }
 }
 
 function computeTotals(

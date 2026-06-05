@@ -20,7 +20,7 @@ const STATUS_OPTIONS: LeadStatus[] = ["new", "contacted", "kp_sent", "won", "los
 const SOURCE_OPTIONS: LeadSource[] = ["contact", "project", "estimate", "partner", "kp_bot"];
 
 export default function AdminLeadsListPage() {
-  const { password } = useAdmin();
+  const { token } = useAdmin();
   const [leads, setLeads] = useState<LeadRow[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -45,7 +45,7 @@ export default function AdminLeadsListPage() {
     setLoading(true);
     setError(null);
     try {
-      const r = await adminFetch<{ ok: true; leads: LeadRow[]; total: number }>(password, {
+      const r = await adminFetch<{ ok: true; leads: LeadRow[]; total: number }>(token, {
         action: "list_leads",
         limit:  PAGE_SIZE,
         offset,
@@ -60,7 +60,7 @@ export default function AdminLeadsListPage() {
     } finally {
       setLoading(false);
     }
-  }, [password, offset, statusFilter, sourceFilter, debouncedSearch]);
+  }, [token, offset, statusFilter, sourceFilter, debouncedSearch]);
 
   useEffect(() => { load(); }, [load]);
 

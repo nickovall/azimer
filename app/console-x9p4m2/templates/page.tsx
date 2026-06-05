@@ -21,7 +21,7 @@ const PLACEHOLDERS = [
 ];
 
 export default function AdminTemplatesPage() {
-  const { password } = useAdmin();
+  const { token } = useAdmin();
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
   const [filter, setFilter] = useState<"all" | "sms" | "email">("all");
   const [editing, setEditing] = useState<MessageTemplate | null>(null);
@@ -32,14 +32,14 @@ export default function AdminTemplatesPage() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const r = await adminFetch<{ ok: true; templates: MessageTemplate[] }>(password, {
+      const r = await adminFetch<{ ok: true; templates: MessageTemplate[] }>(token, {
         action: "list_templates", only_active: false,
       });
       setTemplates(r.templates ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [password]);
+  }, [token]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -61,7 +61,7 @@ export default function AdminTemplatesPage() {
     setSaving(true);
     setError(null);
     try {
-      await adminFetch(password, {
+      await adminFetch(token, {
         action: "save_template",
         id: editing?.id || undefined,
         channel: draft.channel,
@@ -85,7 +85,7 @@ export default function AdminTemplatesPage() {
   async function remove(id: string) {
     if (!confirm("Деактивировать шаблон?")) return;
     try {
-      await adminFetch(password, { action: "delete_template", id });
+      await adminFetch(token, { action: "delete_template", id });
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

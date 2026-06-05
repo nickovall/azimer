@@ -15,6 +15,7 @@ function formatSize(bytes: number) {
 export default function ProjectForm() {
   const [sent, setSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     clientType: "",
     name: "",
@@ -72,6 +73,7 @@ export default function ProjectForm() {
         e.preventDefault();
         if (submitting) return;
         setSubmitting(true);
+        setError(null);
         try {
           // Сначала загружаем файлы и собираем signed URLs
           const fileUrls: string[] = [];
@@ -89,10 +91,13 @@ export default function ProjectForm() {
             message: form.description || undefined,
             files: fileUrls.length ? fileUrls : undefined,
           });
+          setSent(true);
         } catch (err) {
           console.error(err);
+          setError("Не удалось отправить проект. Проверьте файлы и попробуйте ещё раз.");
+        } finally {
+          setSubmitting(false);
         }
-        setSent(true);
       }}
       className="rounded-2xl border border-line bg-white p-7 md:p-9"
     >
@@ -209,9 +214,10 @@ export default function ProjectForm() {
 
       <button
         type="submit"
+        disabled={submitting}
         className="mt-6 inline-flex w-full items-center justify-center gap-2.5 rounded-full bg-orange px-7 py-4 text-sm font-semibold text-white transition-all duration-300 hover:bg-orange-bright hover:-translate-y-0.5 sm:w-auto"
       >
-        Отправить проект
+        {submitting ? "Отправляем…" : "Отправить проект"}
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
           <path
             d="M2 8h11M9 4l4 4-4 4"
@@ -222,6 +228,8 @@ export default function ProjectForm() {
           />
         </svg>
       </button>
+
+      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 
       <p className="mt-4 text-xs leading-relaxed text-graphite-900/45">
         Нажимая кнопку, вы соглашаетесь с{" "}

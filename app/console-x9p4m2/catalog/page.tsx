@@ -24,7 +24,7 @@ interface Category {
 }
 
 export default function AdminCatalogPage() {
-  const { password } = useAdmin();
+  const { token } = useAdmin();
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [activeCat, setActiveCat] = useState<string>("all");
@@ -64,7 +64,7 @@ export default function AdminCatalogPage() {
       if (isNaN(newPrice) || newPrice < 0) {
         throw new Error("Цена должна быть положительным числом");
       }
-      await adminFetch(password, {
+      await adminFetch(token, {
         action:   "update_price",
         category: it.category,
         key:      it.key,
@@ -93,7 +93,7 @@ export default function AdminCatalogPage() {
     setRebuildInfo(null);
     try {
       const r = await adminFetch<{ ok: true; pipeline: { id: number; web_url: string } }>(
-        password,
+        token,
         { action: "trigger_rebuild", reason: "catalog_update" },
       );
       setRebuildInfo(r.pipeline);

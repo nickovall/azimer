@@ -195,6 +195,8 @@ export default function RaschetWizard() {
     clientType: "",
   });
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const steps: StepId[] =
     state.frame === "modular"
@@ -517,6 +519,9 @@ export default function RaschetWizard() {
                     }
                   />
                 </div>
+                {submitError && (
+                  <p className="mt-4 text-sm text-red-600">{submitError}</p>
+                )}
               </div>
             )}
         </motion.div>
@@ -536,8 +541,11 @@ export default function RaschetWizard() {
         {current === "result" ? (
           <button
             type="button"
-            disabled={!contact.name || !contact.phone}
+            disabled={!contact.name || !contact.phone || submitting}
             onClick={async () => {
+              if (submitting) return;
+              setSubmitting(true);
+              setSubmitError(null);
               try {
                 await submitLead({
                   source: "estimate",
@@ -546,16 +554,18 @@ export default function RaschetWizard() {
                   phone: contact.phone,
                   object_type: state.objectType || undefined,
                   estimate: { state, ...estimate },
-                  catalog_version: estimate.catalogVersion,
                 });
+                setSubmitted(true);
               } catch (err) {
                 console.error(err);
+                setSubmitError("Не удалось отправить заявку. Проверьте связь и попробуйте ещё раз.");
+              } finally {
+                setSubmitting(false);
               }
-              setSubmitted(true);
             }}
             className="inline-flex items-center gap-2 rounded-full bg-orange px-7 py-3.5 text-sm font-semibold text-white transition-all duration-300 hover:bg-orange-bright hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0"
           >
-            Отправить заявку
+            {submitting ? "Отправляем…" : "Отправить заявку"}
           </button>
         ) : (
           <button

@@ -3,17 +3,16 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { adminFetch } from "@/lib/admin-api";
+import { adminFetch, adminLogin } from "@/lib/admin-api";
 
-// Корень админки и секретный ключ доступа. URL для входа:
-//   azimer.ru/console-x9p4m2?k=Az9pK2m4Tn7Wq3
-// Без правильного ?k= отдаём 404 — посторонний не узнает что эта страница вообще существует.
+// Корень админки и gate-key доступа. Без правильного ?k= отдаём 404.
+// Gate-key попадает в JS bundle и не заменяет серверную проверку admin token.
 export const ADMIN_ROOT = "/console-x9p4m2";
-const GATE_KEY = "Az9pK2m4Tn7Wq3";
+const GATE_KEY = process.env.NEXT_PUBLIC_ADMIN_GATE_KEY ?? "";
 const GATE_STORAGE = "az_g";
 
 interface AdminCtx {
-  password: string;
+  token: string;
   logout: () => void;
 }
 
@@ -39,7 +38,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const [gated, setGated] = useState(false);
   const [gateChecked, setGateChecked] = useState(false);
 
-  const [password, setPassword] = useState("");
+  const [token, setToken] = useState("");
   const [input, setInput] = useState("");
   const [authed, setAuthed] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -50,7 +49,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     if (typeof window === "undefined") return;
     const urlKey = new URLSearchParams(window.location.search).get("k");
     const stored = sessionStorage.getItem(GATE_STORAGE);
-    if (urlKey === GATE_KEY) {
+    if (GATE_KEY && urlKey === GATE_KEY) {
       sessionStorage.setItem(GATE_STORAGE, "1");
       // Уберём ?k= из URL чтобы не мелькал в скриншотах/истории
       const url = new URL(window.location.href);
@@ -63,40 +62,65 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     setGateChecked(true);
   }, []);
 
-  // Шаг 2 (только если gated): восстановить пароль из sessionStorage и проверить его на сервере
+  // Шаг 2 (только если gated): восстановить короткоживущий session token и проверить его на сервере.
   useEffect(() => {
     if (!gated) { setChecking(false); return; }
-    const saved = typeof window !== "undefined" ? sessionStorage.getItem("admin_pw") : null;
-    if (saved) {
-      verify(saved).finally(() => setChecking(false));
+    const savedToken = typeof window !== "undefined" ? sessionStorage.getItem("admin_token") : null;
+    const savedExp = typeof window !== "undefined" ? Number(sessionStorage.getItem("admin_token_exp") ?? 0) : 0;
+    const now = Math.floor(Date.now() / 1000);
+    if (savedToken && savedExp > now + 10) {
+      verifySession(savedToken).finally(() => setChecking(false));
     } else {
+      sessionStorage.removeItem("admin_token");
+      sessionStorage.removeItem("admin_token_exp");
       setChecking(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gated]);
 
-  async function verify(pw: string) {
+  async function verifySession(savedToken: string) {
     setError(null);
     try {
-      await adminFetch(pw, { action: "verify_password" });
-      sessionStorage.setItem("admin_pw", pw);
-      setPassword(pw);
+      const r = await adminFetch<{ ok: true; expires_at: number }>(savedToken, { action: "verify_session" });
+      sessionStorage.setItem("admin_token", savedToken);
+      sessionStorage.setItem("admin_token_exp", String(r.expires_at));
+      setToken(savedToken);
       setAuthed(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes("Forbidden") || msg.includes("403")) {
+      setError(msg.includes("Unauthorized") || msg.includes("401") ? "Сессия истекла" : "Ошибка: " + msg);
+      setAuthed(false);
+      sessionStorage.removeItem("admin_token");
+      sessionStorage.removeItem("admin_token_exp");
+    }
+  }
+
+  async function login(pw: string) {
+    setError(null);
+    try {
+      const session = await adminLogin(pw);
+      sessionStorage.setItem("admin_token", session.token);
+      sessionStorage.setItem("admin_token_exp", String(session.expires_at));
+      setToken(session.token);
+      setInput("");
+      setAuthed(true);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("Unauthorized") || msg.includes("401")) {
         setError("Неверный пароль");
       } else {
         setError("Ошибка: " + msg);
       }
       setAuthed(false);
-      sessionStorage.removeItem("admin_pw");
+      sessionStorage.removeItem("admin_token");
+      sessionStorage.removeItem("admin_token_exp");
     }
   }
 
   function logout() {
-    sessionStorage.removeItem("admin_pw");
-    setPassword("");
+    sessionStorage.removeItem("admin_token");
+    sessionStorage.removeItem("admin_token_exp");
+    setToken("");
     setInput("");
     setAuthed(false);
   }
@@ -127,12 +151,12 @@ export default function AdminShell({ children }: { children: ReactNode }) {
             autoFocus
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && verify(input)}
+            onKeyDown={(e) => e.key === "Enter" && login(input)}
             placeholder="Пароль"
             className="w-full rounded-2xl border border-line bg-white px-5 py-3 text-base focus:border-orange focus:outline-none"
           />
           <button
-            onClick={() => verify(input)}
+            onClick={() => login(input)}
             className="w-full rounded-full bg-orange py-3 text-sm font-semibold text-white hover:bg-orange-bright"
           >
             Войти
@@ -144,7 +168,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <Ctx.Provider value={{ password, logout }}>
+    <Ctx.Provider value={{ token, logout }}>
       <div className="bg-light pb-24 pt-24">
         <div className="mx-auto flex w-full max-w-[1400px] gap-6 px-6">
           <Sidebar />

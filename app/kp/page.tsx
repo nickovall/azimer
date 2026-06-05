@@ -2,11 +2,20 @@
 
 import { useEffect, useState } from "react";
 import Container from "@/components/ui/Container";
-import { calculate, groupLinesByGroup, groupLabel, formatRub, getRegion } from "@/lib/calculator";
+import { calculate, groupLinesByGroup, groupLabel, formatRub, getRegion, CATALOG_VERSION } from "@/lib/calculator";
 import type { BuildingInput, Estimate } from "@/lib/calculator/types";
 
+interface KpPayload {
+  input: BuildingInput;
+  client?: { name?: string; phone?: string };
+  leadId?: string;
+  catalogVersion?: string;
+  issuedAt?: string;
+  mode?: "current-recalc" | string;
+}
+
 // Декодирование данных из URL (#data=base64)
-function decodeInput(): { input: BuildingInput; client?: { name?: string; phone?: string } } | null {
+function decodeInput(): KpPayload | null {
   if (typeof window === "undefined") return null;
   try {
     const hash = window.location.hash.slice(1);
@@ -14,7 +23,9 @@ function decodeInput(): { input: BuildingInput; client?: { name?: string; phone?
     const dataRaw = params.get("data");
     if (!dataRaw) return null;
     const decoded = decodeURIComponent(escape(atob(dataRaw)));
-    return JSON.parse(decoded);
+    const parsed = JSON.parse(decoded);
+    if (parsed?.input) return parsed;
+    return { input: parsed };
   } catch (e) {
     console.error("Failed to decode input:", e);
     return null;
@@ -24,6 +35,7 @@ function decodeInput(): { input: BuildingInput; client?: { name?: string; phone?
 export default function KpPage() {
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [client, setClient] = useState<{ name?: string; phone?: string } | null>(null);
+  const [payloadMeta, setPayloadMeta] = useState<Omit<KpPayload, "input" | "client"> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -36,6 +48,12 @@ export default function KpPage() {
       const est = calculate(decoded.input);
       setEstimate(est);
       setClient(decoded.client ?? null);
+      setPayloadMeta({
+        leadId: decoded.leadId,
+        catalogVersion: decoded.catalogVersion,
+        issuedAt: decoded.issuedAt,
+        mode: decoded.mode,
+      });
     } catch (e: any) {
       setError(`Ошибка расчёта: ${e.message}`);
     }
@@ -72,7 +90,7 @@ export default function KpPage() {
               <h1 className="mt-2 text-4xl font-extrabold tracking-tight text-graphite-900 md:text-5xl">
                 ООО «АЗИМЕР»
               </h1>
-              <p className="mt-2 text-sm text-graphite-900/60">Каркасные здания под ключ · Красноярск</p>
+              <p className="mt-2 text-sm text-graphite-900/60">Предварительное КП · каркасные здания под ключ</p>
             </div>
             <div className="text-right">
               <p className="font-mono text-xs uppercase tracking-[0.18em] text-graphite-900/40">Дата</p>
@@ -93,6 +111,19 @@ export default function KpPage() {
             )}
           </div>
         )}
+
+        <div className="mb-8 rounded-2xl border border-orange/25 bg-orange/[0.06] p-5 text-sm leading-relaxed text-graphite-900/75">
+          <p className="font-semibold text-graphite-900">Расчёт пересчитан по текущему каталогу</p>
+          <p className="mt-2">
+            Параметры в ссылке не являются электронной подписью цены. Итоговая
+            стоимость фиксируется менеджером после проверки заявки, нагрузок и
+            спецификации.
+          </p>
+          <p className="mt-2 font-mono text-[11px] text-graphite-900/45">
+            Текущий каталог: {CATALOG_VERSION}
+            {payloadMeta?.catalogVersion ? ` · каталог ссылки: ${payloadMeta.catalogVersion}` : ""}
+          </p>
+        </div>
 
         {/* ─────────── Описание объекта ─────────── */}
         <div className="mb-8 rounded-2xl border border-line bg-white p-7">
@@ -265,7 +296,7 @@ export default function KpPage() {
 
         {/* ─────────── Подпись ─────────── */}
         <div className="mt-10 border-t border-line pt-6 text-center text-xs text-graphite-900/40">
-          <p>ООО «АЗИМЕР» · ИНН 2466294484 · ОГРН 1232400004248 · Красноярск</p>
+          <p>ООО «АЗИМЕР» · ИНН 2466294494 · ОГРН 1232400004242 · Красноярск</p>
           <p className="mt-1">azimer.ru · Расчёт: {new Date(estimate.calculatedAt).toLocaleString("ru-RU")}</p>
         </div>
       </Container>
@@ -331,6 +362,9 @@ const flagLabel = (f: string) => ({
   permafrost: "вечная мерзлота",
   heavy_insulation: "тяжёлое утепление",
   tall_rack: "высокие стеллажи",
+  very_large_object: "крупный объект",
+  unsupported_region: "регион требует уточнения",
+  non_standard_envelope: "нестандартная оболочка",
 }[f] ?? f);
 
 // ─────────── Что входит / не входит ───────────

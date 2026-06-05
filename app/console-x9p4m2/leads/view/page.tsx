@@ -29,7 +29,7 @@ export default function AdminLeadViewPageWrapper() {
 }
 
 function AdminLeadViewPage() {
-  const { password } = useAdmin();
+  const { token } = useAdmin();
   const params = useSearchParams();
   const id = params.get("id");
 
@@ -69,11 +69,11 @@ function AdminLeadViewPage() {
     setError(null);
     try {
       const [leadR, tplR, msgR, ctxR] = await Promise.all([
-        adminFetch<{ ok: true; lead: LeadFull; files: LeadFileLink[] }>(password, { action: "get_lead", id }),
-        adminFetch<{ ok: true; templates: MessageTemplate[] }>(password, { action: "list_templates" }),
-        adminFetch<{ ok: true; messages: LeadMessage[] }>(password, { action: "list_lead_messages", lead_id: id }),
+        adminFetch<{ ok: true; lead: LeadFull; files: LeadFileLink[] }>(token, { action: "get_lead", id }),
+        adminFetch<{ ok: true; templates: MessageTemplate[] }>(token, { action: "list_templates" }),
+        adminFetch<{ ok: true; messages: LeadMessage[] }>(token, { action: "list_lead_messages", lead_id: id }),
         adminFetch<{ ok: true; context: { manager_phone: string; manager_name: string; azimer_site: string } }>(
-          password, { action: "get_message_context" }
+          token, { action: "get_message_context" }
         ).catch(() => ({ ok: true as const, context: msgContext })),
       ]);
       setLead(leadR.lead);
@@ -87,7 +87,7 @@ function AdminLeadViewPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, password]);
+  }, [id, token]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -95,7 +95,7 @@ function AdminLeadViewPage() {
     if (!lead || lead.status === s) return;
     setSavingStatus(s);
     try {
-      await adminFetch(password, { action: "update_lead_status", id: lead.id, status: s });
+      await adminFetch(token, { action: "update_lead_status", id: lead.id, status: s });
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -108,7 +108,7 @@ function AdminLeadViewPage() {
     if (!lead) return;
     setSavingNotes(true);
     try {
-      await adminFetch(password, { action: "update_lead_notes", id: lead.id, notes: notesDraft });
+      await adminFetch(token, { action: "update_lead_notes", id: lead.id, notes: notesDraft });
       setEditingNotes(false);
       await load();
     } catch (e) {
@@ -167,7 +167,7 @@ function AdminLeadViewPage() {
     setSending(true);
     setSendResult(null);
     try {
-      const r = await adminFetch<{ ok: boolean; status: string; error?: string }>(password, {
+      const r = await adminFetch<{ ok: boolean; status: string; error?: string }>(token, {
         action: sendChannel === "sms" ? "send_sms" : "send_email",
         lead_id: lead.id,
         template_id: editingBody ? undefined : selectedTplId,
@@ -183,7 +183,7 @@ function AdminLeadViewPage() {
         setSendResult({ ok: false, text: "❌ " + (r.error ?? "Ошибка отправки") });
       }
       // обновить историю
-      const msgR = await adminFetch<{ ok: true; messages: LeadMessage[] }>(password, {
+      const msgR = await adminFetch<{ ok: true; messages: LeadMessage[] }>(token, {
         action: "list_lead_messages", lead_id: lead.id,
       });
       setMessages(msgR.messages ?? []);

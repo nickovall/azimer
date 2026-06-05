@@ -5,7 +5,8 @@ import Container from "@/components/ui/Container";
 import Label from "@/components/ui/Label";
 import Reveal from "@/components/ui/Reveal";
 import Process from "@/components/sections/Process";
-// Секция «Благодарственные письма» (Testimonials) убрана по запросу Азамата (2026-06-04).
+// Благодарственные письма не публикуем на сайте по пожеланию заказчика.
+// Не возвращать без нового явного согласования.
 import Trust from "@/components/sections/Trust";
 import CtaFinal from "@/components/sections/CtaFinal";
 import { principles } from "@/lib/content";

@@ -2,8 +2,8 @@
 // Заменяет старую catalog-admin. После деплоя catalog-admin можно удалить.
 //
 // Деплой: Supabase Dashboard → Edge Functions → Deploy new function → имя admin-api
-// Verify JWT: отключить (используем свой пароль)
-// Env: ADMIN_PASSWORD
+// Verify JWT: отключить (используем свой короткоживущий admin session token)
+// Env: ADMIN_PASSWORD, ADMIN_SESSION_SECRET, SITE_URL
 
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -11,47 +11,175 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SUPABASE_URL    = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY     = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const ADMIN_PASSWORD  = Deno.env.get("ADMIN_PASSWORD") ?? "";
+const SITE_URL        = Deno.env.get("SITE_URL") ?? "https://azimer.ru";
+const ADMIN_SESSION_SECRET = Deno.env.get("ADMIN_SESSION_SECRET") ?? ADMIN_PASSWORD;
+const ADMIN_TOKEN_TTL_SECONDS = Math.max(60, Math.min(
+  Number(Deno.env.get("ADMIN_TOKEN_TTL_SECONDS") ?? 30 * 60),
+  8 * 60 * 60,
+));
 
 const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
-const CORS = {
-  "Access-Control-Allow-Origin":  "*",
+const CORS_BASE = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  // x-admin-password больше не используется — пароль теперь в body как __pw,
-  // потому что Supabase Gateway не пропускает custom headers через preflight.
   "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey",
 };
 
 const ALLOWED_LEAD_STATUSES = new Set(["new", "contacted", "kp_sent", "won", "lost"]);
 
-function json(body: any, status = 200) {
+function normalizeOrigin(value: string): string | null {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+function allowedOrigins(): Set<string> {
+  const origins = new Set<string>([
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+  ]);
+  const site = normalizeOrigin(SITE_URL);
+  if (site) origins.add(site);
+  for (const raw of (Deno.env.get("ADMIN_ALLOWED_ORIGINS") ?? "").split(",")) {
+    const origin = normalizeOrigin(raw.trim());
+    if (origin) origins.add(origin);
+  }
+  return origins;
+}
+
+function corsFor(req: Request): { allowed: boolean; headers: Record<string, string> } {
+  const origin = req.headers.get("Origin");
+  if (!origin) {
+    return { allowed: true, headers: { ...CORS_BASE, "Access-Control-Allow-Origin": normalizeOrigin(SITE_URL) ?? SITE_URL } };
+  }
+  const normalized = normalizeOrigin(origin);
+  const allowed = !!normalized && allowedOrigins().has(normalized);
+  return {
+    allowed,
+    headers: {
+      ...CORS_BASE,
+      ...(allowed ? { "Access-Control-Allow-Origin": normalized!, "Access-Control-Max-Age": "86400" } : {}),
+    },
+  };
+}
+
+function jsonResponse(body: any, status: number, corsHeaders: Record<string, string>) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", ...CORS },
+    headers: { "Content-Type": "application/json", ...corsHeaders },
   });
 }
 
+function bytesToBase64Url(bytes: Uint8Array): string {
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function stringToBase64Url(value: string): string {
+  return bytesToBase64Url(new TextEncoder().encode(value));
+}
+
+function base64UrlToBytes(value: string): Uint8Array {
+  const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+  const bin = atob(padded);
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+}
+
+async function hmacSha256(data: string, secret: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data));
+  return bytesToBase64Url(new Uint8Array(sig));
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+async function createAdminToken(): Promise<{ token: string; exp: number }> {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    sub: "admin",
+    iat: now,
+    exp: now + ADMIN_TOKEN_TTL_SECONDS,
+  };
+  const encoded = stringToBase64Url(JSON.stringify(payload));
+  const sig = await hmacSha256(encoded, ADMIN_SESSION_SECRET);
+  return { token: `${encoded}.${sig}`, exp: payload.exp };
+}
+
+async function verifyAdminToken(req: Request): Promise<{ ok: true; exp: number } | { ok: false; error: string }> {
+  if (!ADMIN_SESSION_SECRET) return { ok: false, error: "ADMIN_SESSION_SECRET is not configured" };
+  const auth = req.headers.get("Authorization") ?? "";
+  const m = auth.match(/^Bearer\s+(.+)$/i);
+  if (!m) return { ok: false, error: "Missing bearer token" };
+
+  const [payloadPart, sigPart] = m[1].split(".");
+  if (!payloadPart || !sigPart) return { ok: false, error: "Invalid token" };
+
+  const expected = await hmacSha256(payloadPart, ADMIN_SESSION_SECRET);
+  if (!timingSafeEqual(expected, sigPart)) return { ok: false, error: "Invalid token" };
+
+  let payload: any;
+  try {
+    payload = JSON.parse(new TextDecoder().decode(base64UrlToBytes(payloadPart)));
+  } catch {
+    return { ok: false, error: "Invalid token payload" };
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  if (payload?.sub !== "admin" || typeof payload?.exp !== "number" || payload.exp <= now) {
+    return { ok: false, error: "Token expired" };
+  }
+  return { ok: true, exp: payload.exp };
+}
+
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
-  if (req.method !== "POST")    return json({ error: "POST only" }, 405);
+  const cors = corsFor(req);
+  const json = (body: any, status = 200) => jsonResponse(body, status, cors.headers);
+
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: cors.allowed ? 204 : 403, headers: cors.headers });
+  }
+  if (!cors.allowed) return json({ error: "Origin not allowed" }, 403);
+  if (req.method !== "POST") return json({ error: "POST only" }, 405);
 
   let body: any;
   try { body = await req.json(); }
   catch { return json({ error: "Invalid JSON" }, 400); }
-
-  // ─── Auth: пароль в body (__pw) ───
-  const pw = typeof body?.__pw === "string" ? body.__pw : "";
-  if (!ADMIN_PASSWORD || pw !== ADMIN_PASSWORD) {
-    return json({ error: "Forbidden" }, 403);
-  }
 
   const action = body?.action;
 
   // ════════════════════════════════════════════════════════════════
   //   AUTH
   // ════════════════════════════════════════════════════════════════
-  if (action === "verify_password") {
-    return json({ ok: true });
+  if (action === "login") {
+    const pw = typeof body?.password === "string" ? body.password : "";
+    if (!ADMIN_PASSWORD || !ADMIN_SESSION_SECRET || pw !== ADMIN_PASSWORD) {
+      return json({ error: "Unauthorized" }, 401);
+    }
+    const session = await createAdminToken();
+    return json({ ok: true, token: session.token, expires_at: session.exp });
+  }
+
+  const admin = await verifyAdminToken(req);
+  if (!admin.ok) return json({ error: "Unauthorized" }, 401);
+
+  if (action === "verify_session") {
+    return json({ ok: true, expires_at: admin.exp });
   }
 
   // ════════════════════════════════════════════════════════════════
@@ -468,7 +596,6 @@ Deno.serve(async (req) => {
 //   УТИЛИТЫ ДЛЯ ОТПРАВКИ СООБЩЕНИЙ
 // ════════════════════════════════════════════════════════════════
 
-const SITE_URL = Deno.env.get("SITE_URL") ?? "https://azimer.ru";
 const MANAGER_PHONE = Deno.env.get("MANAGER_PHONE") ?? "+7 (391) 000-00-00";
 const MANAGER_NAME  = Deno.env.get("MANAGER_NAME")  ?? "Менеджер АЗИМЕР";
 const SMSC_LOGIN    = Deno.env.get("SMSC_LOGIN")    ?? "";
@@ -511,12 +638,63 @@ function buildKpUrlForLead(lead: any): string {
   const est = lead?.estimate;
   if (!est) return SITE_URL + "/kp/";
   try {
-    const json = JSON.stringify(est);
+    const input = est.input ?? estimateStateToInput(est.state ?? {}, lead);
+    const payload = {
+      input,
+      client: { name: lead?.name, phone: lead?.phone },
+      leadId: lead?.id,
+      catalogVersion: lead?.catalog_version ?? est.catalogVersion ?? null,
+      issuedAt: lead?.created_at ?? new Date().toISOString(),
+      mode: "current-recalc",
+    };
+    const json = JSON.stringify(payload);
     const b64 = btoa(unescape(encodeURIComponent(json)));
     return `${SITE_URL}/kp/#data=${b64}`;
   } catch {
     return SITE_URL + "/kp/";
   }
+}
+
+function estimateStateToInput(state: any, lead: any): any {
+  const cladding = mapKpCladding(state.cladding);
+  const roofing = mapKpRoofing(state.roofing, cladding);
+  const claddingThk = state.claddingThk ?? state.cladding_thk ?? 150;
+  const options = state.options ?? {};
+  return {
+    region: state.region ?? "krsk_city",
+    objectType: state.objectType ?? state.object_type ?? lead?.object_type ?? "sklad",
+    length: Number(state.length ?? 0),
+    width: Number(state.width ?? 0),
+    height: Number(state.height ?? 0),
+    frame: state.frame === "lstk" || state.frame === "modular" ? state.frame : "metal",
+    cladding,
+    claddingThk: cladding.startsWith("sandwich") ? claddingThk : undefined,
+    roofing,
+    roofingThk: roofing.startsWith("sandwich") ? claddingThk : undefined,
+    foundation: mapKpFoundation(state.foundation),
+    gates: Number(options.gate ?? 0) > 0 ? [{ size: "4x4", count: Number(options.gate) }] : [],
+    windows: Number(options.window ?? 0) > 0 ? [{ size: "1500x2000", count: Number(options.window) }] : [],
+    doors: { count: Number(options.door ?? 0) },
+  };
+}
+
+function mapKpCladding(value: string | undefined): string {
+  if (value === "sandwich_minvata" || value === "sandwich_pir" || value === "proflist") return value;
+  return "none";
+}
+
+function mapKpRoofing(value: string | undefined, cladding: string): string {
+  if (value === "sandwich") return cladding === "sandwich_pir" ? "sandwich_pir" : "sandwich_minvata";
+  if (value === "sandwich_minvata" || value === "sandwich_pir") return value;
+  return "proflist";
+}
+
+function mapKpFoundation(value: string | undefined): string {
+  if (value === "pile" || value === "pile_screw") return "pile_screw";
+  if (value === "strip") return "strip";
+  if (value === "slab" || value === "slab_200") return "slab_200";
+  if (value === "slab_300" || value === "pile_grillage") return value;
+  return "none";
 }
 
 function renderPlaceholders(body: string, lead: any): string {

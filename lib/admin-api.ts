@@ -87,6 +87,11 @@ export interface DashboardStats {
   recent: LeadRow[];
 }
 
+export interface AdminSession {
+  token: string;
+  expires_at: number;
+}
+
 export const STATUS_LABEL: Record<LeadStatus, string> = {
   new:       "🆕 Новая",
   contacted: "🟡 В работе",
@@ -111,27 +116,42 @@ export const SOURCE_LABEL: Record<LeadSource, string> = {
   kp_bot:   "💬 Telegram-бот",
 };
 
-export async function adminFetch<T = unknown>(
-  password: string,
-  // deno-lint-ignore-explicit-any
-  payload: { action: string; [k: string]: any },
-): Promise<T> {
-  // Пароль кладём в body, а не в header — Supabase Gateway режет custom-headers
-  // на OPTIONS preflight (whitelist: authorization, apikey, content-type, ...).
-  const r = await fetch(ADMIN_FN_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type":  "application/json",
-      "Authorization": "Bearer " + PUBLISHABLE_KEY,
-      "apikey":        PUBLISHABLE_KEY,
-    },
-    body: JSON.stringify({ ...payload, __pw: password }),
-  });
+async function parseAdminResponse<T>(r: Response): Promise<T> {
   if (!r.ok) {
     const j = await r.json().catch(() => ({}));
     throw new Error(j.error || `${r.status} ${r.statusText}`);
   }
   return r.json() as Promise<T>;
+}
+
+export async function adminLogin(password: string): Promise<AdminSession> {
+  const r = await fetch(ADMIN_FN_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type":  "application/json",
+      "apikey":        PUBLISHABLE_KEY,
+    },
+    body: JSON.stringify({ action: "login", password }),
+  });
+  const data = await parseAdminResponse<{ ok: true; token: string; expires_at: number }>(r);
+  return { token: data.token, expires_at: data.expires_at };
+}
+
+export async function adminFetch<T = unknown>(
+  token: string,
+  // deno-lint-ignore-explicit-any
+  payload: { action: string; [k: string]: any },
+): Promise<T> {
+  const r = await fetch(ADMIN_FN_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type":  "application/json",
+      "Authorization": "Bearer " + token,
+      "apikey":        PUBLISHABLE_KEY,
+    },
+    body: JSON.stringify(payload),
+  });
+  return parseAdminResponse<T>(r);
 }
 
 export function fmtRub(n: number | null | undefined): string {

@@ -44,7 +44,7 @@ supabase link --project-ref <PROJECT_REF>
 
 supabase secrets set TELEGRAM_BOT_TOKEN=<токен>
 supabase secrets set TELEGRAM_WEBHOOK_SECRET=<придуманная случайная строка>
-supabase secrets set ALLOWED_CHAT_IDS=<chat_id через запятую>
+supabase secrets set ADMIN_CHAT_IDS=<admin_chat_id через запятую>
 
 cd "путь/к/azimer-site"
 supabase functions deploy telegram-bot --no-verify-jwt
@@ -63,7 +63,7 @@ supabase functions deploy telegram-bot --no-verify-jwt
 - Раздел **Secrets** → добавить:
   - `TELEGRAM_BOT_TOKEN`
   - `TELEGRAM_WEBHOOK_SECRET`
-  - `ALLOWED_CHAT_IDS`
+  - `ADMIN_CHAT_IDS` (или legacy `ALLOWED_CHAT_IDS`)
 
 ---
 
@@ -124,16 +124,18 @@ curl.exe "https://api.telegram.org/bot<TOKEN>/deleteWebhook"
 
 ## Кому что разрешено
 
-Бот отвечает только тем chat_id что в `ALLOWED_CHAT_IDS`.
+Анкета КП доступна любому пользователю бота.
+Админские команды (`/leads`, `/find`, `/stats`, `/kp <id>`) и кнопки статусов
+доступны только chat_id из `ADMIN_CHAT_IDS` (или legacy `ALLOWED_CHAT_IDS`).
 
-Чтоб добавить нового получателя — узнай его chat_id:
+Чтоб добавить нового администратора — узнай его chat_id:
 1. Получатель пишет боту любое сообщение
 2. `curl.exe "https://api.telegram.org/bot<TOKEN>/getUpdates"`
 3. Ищи `"from":{"id": ВОТ_ЭТО_ЧИСЛО}`
 
 И добавь через запятую:
 ```
-ALLOWED_CHAT_IDS=8614558675,123456789
+ADMIN_CHAT_IDS=<chat_id_1>,<chat_id_2>
 ```
 
 ---

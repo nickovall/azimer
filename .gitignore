@@ -54,3 +54,6 @@ next-env.d.ts
 
 # Claude Code local tooling
 /.claude/
+
+# Playwright/audit screenshot artifacts (regenerable, audits reference paths only)
+/output/

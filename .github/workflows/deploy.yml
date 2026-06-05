@@ -1,8 +1,8 @@
-name: Deploy to GitHub Pages
+# Legacy only. GitLab Pages is the production deployment path for AZIMER.
+# Keep this workflow manual so it cannot race GitLab Pages on push.
+name: Legacy GitHub Pages Deploy
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
