@@ -61,7 +61,7 @@ export default function Footer() {
                     rel="noopener noreferrer"
                     className="transition-colors hover:text-orange"
                   >
-                    Написать в VK{company.vkHandle ? ` (${company.vkHandle})` : ""}
+                    Написать в VK
                   </a>
                 </li>
               ) : null}
