@@ -29,7 +29,30 @@ const CORS_BASE = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey",
 };
 
-const ALLOWED_LEAD_STATUSES = new Set(["new", "contacted", "kp_sent", "won", "lost"]);
+const LEAD_STATUSES = [
+  "new",
+  "contacted",
+  "accepted",
+  "measurement_done",
+  "tz_received",
+  "kp_preparing",
+  "kp_sent",
+  "kp_approved",
+  "sent_to_accountant",
+  "invoice_issued",
+  "paid_partial",
+  "paid_full",
+  "won",
+  "lost",
+  "commission_paid",
+] as const;
+const ALLOWED_LEAD_STATUSES = new Set<string>(LEAD_STATUSES);
+const ALLOWED_SOURCE_CHANNELS = new Set(["site", "tender", "manual"]);
+const ALLOWED_DOC_TYPES = new Set(["tz", "kp", "contract", "invoice", "act", "payment", "mail", "drawing", "other"]);
+const ALLOWED_PAYMENT_STATUSES = new Set(["not_paid", "partial", "paid"]);
+const ALLOWED_KP_STATUSES = new Set(["not_started", "preparing", "sent", "approved"]);
+const ALLOWED_CONTRACT_STATUSES = new Set(["not_started", "drafting", "sent", "signed"]);
+const ALLOWED_INVOICE_STATUSES = new Set(["not_issued", "issued"]);
 
 function normalizeOrigin(value: string): string | null {
   try {
@@ -151,6 +174,128 @@ async function verifyAdminToken(req: Request): Promise<{ ok: true; exp: number }
   return { ok: true, exp: payload.exp };
 }
 
+function nullableString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function optionalNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function isHttpUrl(value: string | null): boolean {
+  if (!value) return true;
+  return /^https?:\/\//i.test(value);
+}
+
+function pipelinePatchForStatus(status: string): Record<string, unknown> {
+  const patch: Record<string, unknown> = { status, deal_status: status };
+  if (status === "tz_received") patch.kp_status = "preparing";
+  if (status === "kp_preparing") patch.kp_status = "preparing";
+  if (status === "kp_sent") patch.kp_status = "sent";
+  if (status === "kp_approved" || status === "sent_to_accountant") patch.kp_status = "approved";
+  if (status === "sent_to_accountant") patch.contract_status = "sent";
+  if (status === "invoice_issued" || status === "paid_partial" || status === "paid_full" || status === "won") {
+    patch.invoice_status = "issued";
+  }
+  if (status === "paid_partial") patch.payment_status = "partial";
+  if (status === "paid_full" || status === "won") patch.payment_status = "paid";
+  return patch;
+}
+
+function documentPatchForType(docType: string): Record<string, unknown> {
+  if (docType === "tz") return { deal_status: "tz_received", status: "tz_received" };
+  if (docType === "kp") return { kp_status: "sent", deal_status: "kp_sent", status: "kp_sent" };
+  if (docType === "contract") return { contract_status: "sent" };
+  if (docType === "invoice") return { invoice_status: "issued", deal_status: "invoice_issued", status: "invoice_issued" };
+  if (docType === "payment") return { payment_status: "partial", deal_status: "paid_partial", status: "paid_partial" };
+  return {};
+}
+
+function summarizeDocuments(docs: Array<any>): Map<string, any> {
+  const byLead = new Map<string, any>();
+  for (const doc of docs) {
+    const leadId = doc.lead_id;
+    const current = byLead.get(leadId) ?? {
+      document_count: 0,
+      has_tz: false,
+      has_kp: false,
+      has_contract: false,
+      has_invoice: false,
+      has_payment: false,
+      kp_amount: null,
+      invoice_amount: null,
+      paid_amount: null,
+    };
+    current.document_count++;
+    if (doc.doc_type === "tz") current.has_tz = true;
+    if (doc.doc_type === "kp") {
+      current.has_kp = true;
+      if (current.kp_amount == null && typeof doc.amount === "number") current.kp_amount = doc.amount;
+    }
+    if (doc.doc_type === "contract") current.has_contract = true;
+    if (doc.doc_type === "invoice") {
+      current.has_invoice = true;
+      if (current.invoice_amount == null && typeof doc.amount === "number") current.invoice_amount = doc.amount;
+    }
+    if (doc.doc_type === "payment") {
+      current.has_payment = true;
+      if (current.paid_amount == null && typeof doc.amount === "number") current.paid_amount = doc.amount;
+    }
+    byLead.set(leadId, current);
+  }
+  return byLead;
+}
+
+async function loadLeadDocuments(leadIds: string[]): Promise<Map<string, any>> {
+  if (leadIds.length === 0) return new Map();
+  const { data, error } = await sb
+    .from("lead_documents")
+    .select("lead_id, doc_type, amount")
+    .in("lead_id", leadIds)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return summarizeDocuments(data ?? []);
+}
+
+async function loadLeadCommissions(leadIds: string[]): Promise<Map<string, any>> {
+  const byLead = new Map<string, any>();
+  if (leadIds.length === 0) return byLead;
+  const { data, error } = await sb
+    .from("deal_commissions")
+    .select("*")
+    .in("lead_id", leadIds);
+  if (error) throw error;
+  for (const row of (data ?? [])) byLead.set(row.lead_id, row);
+  return byLead;
+}
+
+function latestDocUrl(docs: Array<any>, docType: string): string | null {
+  return docs.find((doc) => doc.doc_type === docType && doc.file_url)?.file_url ?? null;
+}
+
+function leadCustomerName(lead: any): string {
+  return lead?.company || lead?.name || "unknown";
+}
+
+function composeAccountantNotice(lead: any, docs: Array<any>): string {
+  const kpUrl = latestDocUrl(docs, "kp");
+  const contractUrl = latestDocUrl(docs, "contract");
+  const amount = docs.find((doc) => (doc.doc_type === "kp" || doc.doc_type === "invoice") && typeof doc.amount === "number")?.amount;
+  return [
+    "Нужно выставить счет",
+    `Lead ID: ${lead.lead_code ?? lead.id}`,
+    `Заказчик: ${leadCustomerName(lead)}`,
+    amount ? `Сумма: ${fmtRubMsg(amount)}` : null,
+    lead.project_folder_url ? `Папка сделки: ${lead.project_folder_url}` : null,
+    kpUrl ? `КП: ${kpUrl}` : null,
+    contractUrl ? `Договор: ${contractUrl}` : null,
+  ].filter(Boolean).join("\n");
+}
+
 Deno.serve(async (req) => {
   const cors = corsFor(req);
   const json = (body: any, status = 200) => jsonResponse(body, status, cors.headers);
@@ -245,6 +390,84 @@ Deno.serve(async (req) => {
 
   // list_leads — список с фильтрами и пагинацией
   if (action === "list_leads") {
+    const limit = Math.min(Number(body.limit ?? 50), 200);
+    const offset = Number(body.offset ?? 0);
+    const status = body.status as string | undefined;
+    const source = body.source as string | undefined;
+    const sourceChannel = body.source_channel as string | undefined;
+    const commission = body.commission as string | undefined;
+    const paymentStatus = body.payment_status as string | undefined;
+    const search = (body.search as string | undefined)?.trim();
+    const dateFrom = body.dateFrom as string | undefined;
+    const dateTo = body.dateTo as string | undefined;
+
+    let q = sb.from("leads")
+      .select(`
+        id, created_at, source, source_channel, lead_code, external_source,
+        external_source_url, created_by_system, status, deal_status,
+        status_updated_at, kp_status, contract_status, invoice_status,
+        payment_status, commission_eligible, commission_rate,
+        commission_notes, project_folder_url, name, phone, email,
+        client_type, object_type, company, message, estimate, utm_source,
+        utm_medium, utm_campaign, landing_page
+      `, { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (status && ALLOWED_LEAD_STATUSES.has(status)) q = q.eq("deal_status", status);
+    if (source) q = q.eq("source", source);
+    if (sourceChannel && ALLOWED_SOURCE_CHANNELS.has(sourceChannel)) q = q.eq("source_channel", sourceChannel);
+    if (commission === "yes") q = q.eq("commission_eligible", true);
+    if (commission === "no") q = q.eq("commission_eligible", false);
+    if (paymentStatus && ALLOWED_PAYMENT_STATUSES.has(paymentStatus)) q = q.eq("payment_status", paymentStatus);
+    if (dateFrom) q = q.gte("created_at", dateFrom);
+    if (dateTo) q = q.lte("created_at", dateTo);
+    if (search) {
+      const s = search.replace(/[%(),]/g, "");
+      q = q.or(`lead_code.ilike.%${s}%,name.ilike.%${s}%,phone.ilike.%${s}%,email.ilike.%${s}%,company.ilike.%${s}%,external_source.ilike.%${s}%`);
+    }
+
+    const { data, error, count } = await q;
+    if (error) return json({ error: error.message }, 500);
+
+    try {
+      const rows = data ?? [];
+      const leadIds = rows.map((lead: any) => lead.id);
+      const [documentsByLead, commissionsByLead] = await Promise.all([
+        loadLeadDocuments(leadIds),
+        loadLeadCommissions(leadIds),
+      ]);
+      const leads = rows.map((lead: any) => {
+        const docSummary = documentsByLead.get(lead.id) ?? {
+          document_count: 0,
+          has_tz: false,
+          has_kp: false,
+          has_contract: false,
+          has_invoice: false,
+          has_payment: false,
+          kp_amount: null,
+          invoice_amount: null,
+          paid_amount: null,
+        };
+        const commissionRow = commissionsByLead.get(lead.id) ?? null;
+        return {
+          ...lead,
+          doc_summary: {
+            ...docSummary,
+            kp_amount: commissionRow?.kp_amount || docSummary.kp_amount,
+            invoice_amount: commissionRow?.invoice_amount || docSummary.invoice_amount,
+            paid_amount: commissionRow?.paid_amount || docSummary.paid_amount,
+          },
+          commission: commissionRow,
+        };
+      });
+      return json({ ok: true, leads, total: count ?? 0 });
+    } catch (e: any) {
+      return json({ error: e.message }, 500);
+    }
+  }
+
+  if (action === "list_leads_legacy") {
     const limit  = Math.min(Number(body.limit ?? 50), 200);
     const offset = Number(body.offset ?? 0);
     const status = body.status as string | undefined;        // 'new' | 'contacted' | ...
@@ -285,6 +508,53 @@ Deno.serve(async (req) => {
       .single();
     if (error) return json({ error: error.message }, 500);
 
+    const [documentsQ, commissionQ] = await Promise.all([
+      sb.from("lead_documents")
+        .select("*")
+        .eq("lead_id", id)
+        .order("created_at", { ascending: false }),
+      sb.from("deal_commissions")
+        .select("*")
+        .eq("lead_id", id)
+        .maybeSingle(),
+    ]);
+    if (documentsQ.error) return json({ error: documentsQ.error.message }, 500);
+    if (commissionQ.error) return json({ error: commissionQ.error.message }, 500);
+
+    const files = Array.isArray(lead?.files) ? lead.files : [];
+    const fileLinks: Array<{ path: string; url: string | null }> = [];
+    for (const f of files) {
+      const path = extractStoragePath(f);
+      if (!path) {
+        fileLinks.push({ path: f, url: f });
+        continue;
+      }
+      const { data: signed } = await sb.storage
+        .from("lead-files")
+        .createSignedUrl(path, 5 * 60);
+      fileLinks.push({ path, url: signed?.signedUrl ?? null });
+    }
+
+    return json({
+      ok: true,
+      lead,
+      files: fileLinks,
+      documents: documentsQ.data ?? [],
+      commission: commissionQ.data ?? null,
+    });
+  }
+
+  if (action === "get_lead_legacy") {
+    const { id } = body;
+    if (!id) return json({ error: "Need id" }, 400);
+
+    const { data: lead, error } = await sb
+      .from("leads")
+      .select("*")
+      .eq("id", id)
+      .single();
+    if (error) return json({ error: error.message }, 500);
+
     // Сгенерировать свежие signed URLs для файлов (валидны 1 час)
     const files = Array.isArray(lead?.files) ? lead.files : [];
     const fileLinks: Array<{ path: string; url: string | null }> = [];
@@ -315,6 +585,17 @@ Deno.serve(async (req) => {
     if (!ALLOWED_LEAD_STATUSES.has(status)) {
       return json({ error: "Bad status" }, 400);
     }
+    const { error } = await sb.from("leads").update(pipelinePatchForStatus(status)).eq("id", id);
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true });
+  }
+
+  if (action === "update_lead_status_legacy") {
+    const { id, status } = body;
+    if (!id) return json({ error: "Need id" }, 400);
+    if (!ALLOWED_LEAD_STATUSES.has(status)) {
+      return json({ error: "Bad status" }, 400);
+    }
     const { error } = await sb.from("leads").update({ status }).eq("id", id);
     if (error) return json({ error: error.message }, 500);
     return json({ ok: true });
@@ -331,6 +612,194 @@ Deno.serve(async (req) => {
   }
 
   // ════════════════════════════════════════════════════════════════
+  if (action === "update_lead_deal_fields") {
+    const { id } = body;
+    if (!id) return json({ error: "Need id" }, 400);
+
+    const patch: Record<string, unknown> = {};
+    if (body.source_channel !== undefined) {
+      if (!ALLOWED_SOURCE_CHANNELS.has(body.source_channel)) return json({ error: "Bad source_channel" }, 400);
+      patch.source_channel = body.source_channel;
+    }
+    if (body.external_source !== undefined) patch.external_source = nullableString(body.external_source);
+    if (body.external_source_url !== undefined) {
+      const url = nullableString(body.external_source_url);
+      if (!isHttpUrl(url)) return json({ error: "external_source_url must be http(s)" }, 400);
+      patch.external_source_url = url;
+    }
+    if (body.created_by_system !== undefined) patch.created_by_system = nullableString(body.created_by_system);
+    if (body.project_folder_url !== undefined) {
+      const url = nullableString(body.project_folder_url);
+      if (!isHttpUrl(url)) return json({ error: "project_folder_url must be http(s)" }, 400);
+      patch.project_folder_url = url;
+    }
+    if (body.kp_status !== undefined) {
+      if (!ALLOWED_KP_STATUSES.has(body.kp_status)) return json({ error: "Bad kp_status" }, 400);
+      patch.kp_status = body.kp_status;
+    }
+    if (body.contract_status !== undefined) {
+      if (!ALLOWED_CONTRACT_STATUSES.has(body.contract_status)) return json({ error: "Bad contract_status" }, 400);
+      patch.contract_status = body.contract_status;
+    }
+    if (body.invoice_status !== undefined) {
+      if (!ALLOWED_INVOICE_STATUSES.has(body.invoice_status)) return json({ error: "Bad invoice_status" }, 400);
+      patch.invoice_status = body.invoice_status;
+    }
+    if (body.payment_status !== undefined) {
+      if (!ALLOWED_PAYMENT_STATUSES.has(body.payment_status)) return json({ error: "Bad payment_status" }, 400);
+      patch.payment_status = body.payment_status;
+    }
+    if (body.commission_eligible !== undefined) patch.commission_eligible = body.commission_eligible === true;
+    if (body.commission_rate !== undefined) {
+      const rate = optionalNumber(body.commission_rate);
+      if (rate == null || rate < 0 || rate > 1) return json({ error: "Bad commission_rate" }, 400);
+      patch.commission_rate = rate;
+    }
+    if (body.commission_notes !== undefined) patch.commission_notes = nullableString(body.commission_notes);
+
+    if (Object.keys(patch).length === 0) return json({ error: "No fields to update" }, 400);
+    if (patch.source_channel === "tender" && patch.commission_eligible === true && patch.commission_rate === undefined) {
+      patch.commission_rate = 0.0500;
+    }
+
+    const { data, error } = await sb.from("leads").update(patch).eq("id", id).select("*").single();
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true, lead: data });
+  }
+
+  if (action === "add_lead_document") {
+    const leadId = body.lead_id as string | undefined;
+    const docType = body.doc_type as string | undefined;
+    const title = nullableString(body.title);
+    const fileUrl = nullableString(body.file_url);
+    const amount = optionalNumber(body.amount);
+    if (!leadId) return json({ error: "Need lead_id" }, 400);
+    if (!docType || !ALLOWED_DOC_TYPES.has(docType)) return json({ error: "Bad doc_type" }, 400);
+    if (!title) return json({ error: "Need title" }, 400);
+    if (!isHttpUrl(fileUrl)) return json({ error: "file_url must be http(s)" }, 400);
+
+    const leadR = await sb
+      .from("leads")
+      .select("id, lead_code, source_channel, commission_eligible, commission_rate")
+      .eq("id", leadId)
+      .single();
+    if (leadR.error || !leadR.data) return json({ error: leadR.error?.message ?? "Lead not found" }, 404);
+
+    const row = {
+      lead_id: leadId,
+      lead_code: leadR.data.lead_code,
+      doc_type: docType,
+      title,
+      file_url: fileUrl,
+      storage_provider: body.storage_provider ?? "google_drive",
+      storage_path: nullableString(body.storage_path),
+      amount,
+      currency: "RUB",
+      uploaded_by: nullableString(body.uploaded_by),
+      notes: nullableString(body.notes),
+    };
+    const { data, error } = await sb.from("lead_documents").insert(row).select("*").single();
+    if (error) return json({ error: error.message }, 500);
+
+    const patch = documentPatchForType(docType);
+    if (Object.keys(patch).length > 0) {
+      await sb.from("leads").update(patch).eq("id", leadId);
+    }
+
+    if (leadR.data.source_channel === "tender" && leadR.data.commission_eligible && amount != null) {
+      const commissionPatch: Record<string, unknown> = {
+        lead_id: leadId,
+        lead_code: leadR.data.lead_code,
+        commission_rate: leadR.data.commission_rate || 0.0500,
+      };
+      if (docType === "kp") commissionPatch.kp_amount = amount;
+      if (docType === "invoice") commissionPatch.invoice_amount = amount;
+      if (docType === "payment") {
+        commissionPatch.paid_amount = amount;
+        commissionPatch.payment_status = "partial";
+      }
+      if (Object.keys(commissionPatch).length > 3) {
+        await sb.from("deal_commissions").upsert(commissionPatch, { onConflict: "lead_id" });
+      }
+    }
+
+    return json({ ok: true, document: data });
+  }
+
+  if (action === "update_deal_commission") {
+    const leadId = body.lead_id as string | undefined;
+    if (!leadId) return json({ error: "Need lead_id" }, 400);
+    const leadR = await sb
+      .from("leads")
+      .select("id, lead_code, source_channel, commission_eligible")
+      .eq("id", leadId)
+      .single();
+    if (leadR.error || !leadR.data) return json({ error: leadR.error?.message ?? "Lead not found" }, 404);
+    if (leadR.data.source_channel !== "tender" || !leadR.data.commission_eligible) {
+      return json({ error: "Commission is available only for eligible tender leads" }, 400);
+    }
+
+    const rate = optionalNumber(body.commission_rate);
+    const kpAmount = optionalNumber(body.kp_amount);
+    const invoiceAmount = optionalNumber(body.invoice_amount);
+    const paidAmount = optionalNumber(body.paid_amount);
+    const commissionPaid = optionalNumber(body.commission_paid);
+    const paymentStatus = body.payment_status as string | undefined;
+    if (rate == null || rate < 0 || rate > 1) return json({ error: "Bad commission_rate" }, 400);
+    if (kpAmount == null || invoiceAmount == null || paidAmount == null || commissionPaid == null) {
+      return json({ error: "Amounts must be numbers" }, 400);
+    }
+    if (!paymentStatus || !ALLOWED_PAYMENT_STATUSES.has(paymentStatus)) return json({ error: "Bad payment_status" }, 400);
+
+    const { data, error } = await sb.from("deal_commissions").upsert({
+      lead_id: leadId,
+      lead_code: leadR.data.lead_code,
+      commission_rate: rate,
+      kp_amount: kpAmount,
+      invoice_amount: invoiceAmount,
+      paid_amount: paidAmount,
+      commission_paid: commissionPaid,
+      payment_status: paymentStatus,
+      notes: nullableString(body.notes),
+    }, { onConflict: "lead_id" }).select("*").single();
+    if (error) return json({ error: error.message }, 500);
+
+    await sb.from("leads").update({
+      commission_rate: rate,
+      payment_status: paymentStatus,
+    }).eq("id", leadId);
+    return json({ ok: true, commission: data });
+  }
+
+  if (action === "send_to_accountant") {
+    const { id } = body;
+    if (!id) return json({ error: "Need id" }, 400);
+    const leadR = await sb.from("leads").select("*").eq("id", id).single();
+    if (leadR.error || !leadR.data) return json({ error: leadR.error?.message ?? "Lead not found" }, 404);
+    const docsR = await sb.from("lead_documents").select("*").eq("lead_id", id).order("created_at", { ascending: false });
+    if (docsR.error) return json({ error: docsR.error.message }, 500);
+
+    const notice = composeAccountantNotice(leadR.data, docsR.data ?? []);
+    let delivery = "manual";
+    let deliveryError: string | null = null;
+    if (ACCOUNTANT_EMAIL && RESEND_API_KEY) {
+      const result = await sendEmail(ACCOUNTANT_EMAIL, "Нужно выставить счет - AZIMER", notice);
+      delivery = result.ok ? "email" : "manual";
+      deliveryError = result.error;
+    } else if (ACCOUNTANT_PHONE && SMSC_LOGIN && SMSC_PSW) {
+      const phone = normalizePhone(ACCOUNTANT_PHONE);
+      if (phone) {
+        const result = await sendSms(phone, notice);
+        delivery = result.ok ? "sms" : "manual";
+        deliveryError = result.error;
+      }
+    }
+
+    const { error } = await sb.from("leads").update(pipelinePatchForStatus("sent_to_accountant")).eq("id", id);
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true, delivery, delivery_error: deliveryError, notification_text: notice });
+  }
+
   //   DASHBOARD
   // ════════════════════════════════════════════════════════════════
 
@@ -605,6 +1074,8 @@ Deno.serve(async (req) => {
 
 const MANAGER_PHONE = Deno.env.get("MANAGER_PHONE") ?? "+7 (391) 000-00-00";
 const MANAGER_NAME  = Deno.env.get("MANAGER_NAME")  ?? "Менеджер АЗИМЕР";
+const ACCOUNTANT_EMAIL = Deno.env.get("ACCOUNTANT_EMAIL") ?? "";
+const ACCOUNTANT_PHONE = Deno.env.get("ACCOUNTANT_PHONE") ?? "";
 const SMSC_LOGIN    = Deno.env.get("SMSC_LOGIN")    ?? "";
 const SMSC_PSW      = Deno.env.get("SMSC_PSW")      ?? "";
 const SMSC_SENDER   = Deno.env.get("SMSC_SENDER")   ?? "SMSC.RU";

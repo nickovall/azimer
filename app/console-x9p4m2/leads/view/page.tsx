@@ -8,9 +8,18 @@ import {
   adminFetch,
   fmtDateTime,
   fmtRub,
+  CONTRACT_STATUS_LABEL,
+  DOCUMENT_TYPE_LABEL,
+  INVOICE_STATUS_LABEL,
+  KP_STATUS_LABEL,
+  PAYMENT_STATUS_LABEL,
+  SOURCE_CHANNEL_LABEL,
   STATUS_COLOR,
   STATUS_LABEL,
   SOURCE_LABEL,
+  type DealCommission,
+  type LeadDocument,
+  type LeadDocumentType,
   type LeadFull,
   type LeadFileLink,
   type LeadStatus,
@@ -18,7 +27,22 @@ import {
   type LeadMessage,
 } from "@/lib/admin-api";
 
-const STATUSES: LeadStatus[] = ["new", "contacted", "kp_sent", "won", "lost"];
+const STATUSES: LeadStatus[] = [
+  "new",
+  "accepted",
+  "tz_received",
+  "kp_preparing",
+  "kp_sent",
+  "kp_approved",
+  "sent_to_accountant",
+  "invoice_issued",
+  "paid_partial",
+  "paid_full",
+  "won",
+  "lost",
+  "commission_paid",
+];
+const DOC_TYPES: LeadDocumentType[] = ["tz", "kp", "contract", "invoice", "act", "payment", "mail", "drawing", "other"];
 
 export default function AdminLeadViewPageWrapper() {
   return (
@@ -35,6 +59,8 @@ function AdminLeadViewPage() {
 
   const [lead, setLead] = useState<LeadFull | null>(null);
   const [files, setFiles] = useState<LeadFileLink[]>([]);
+  const [documents, setDocuments] = useState<LeadDocument[]>([]);
+  const [commission, setCommission] = useState<DealCommission | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,6 +68,28 @@ function AdminLeadViewPage() {
   const [notesDraft, setNotesDraft] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [savingStatus, setSavingStatus] = useState<LeadStatus | null>(null);
+  const [folderDraft, setFolderDraft] = useState("");
+  const [savingFolder, setSavingFolder] = useState(false);
+  const [docDraft, setDocDraft] = useState({
+    doc_type: "kp" as LeadDocumentType,
+    title: "",
+    file_url: "",
+    amount: "",
+    uploaded_by: "",
+    notes: "",
+  });
+  const [savingDocument, setSavingDocument] = useState(false);
+  const [actionResult, setActionResult] = useState<string | null>(null);
+  const [commissionDraft, setCommissionDraft] = useState({
+    commission_rate: "0.05",
+    kp_amount: "0",
+    invoice_amount: "0",
+    paid_amount: "0",
+    commission_paid: "0",
+    payment_status: "not_paid" as "not_paid" | "partial" | "paid",
+    notes: "",
+  });
+  const [savingCommission, setSavingCommission] = useState(false);
 
   // ── Отправка сообщений ──
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
@@ -69,7 +117,13 @@ function AdminLeadViewPage() {
     setError(null);
     try {
       const [leadR, tplR, msgR, ctxR] = await Promise.all([
-        adminFetch<{ ok: true; lead: LeadFull; files: LeadFileLink[] }>(token, { action: "get_lead", id }),
+        adminFetch<{
+          ok: true;
+          lead: LeadFull;
+          files: LeadFileLink[];
+          documents: LeadDocument[];
+          commission: DealCommission | null;
+        }>(token, { action: "get_lead", id }),
         adminFetch<{ ok: true; templates: MessageTemplate[] }>(token, { action: "list_templates" }),
         adminFetch<{ ok: true; messages: LeadMessage[] }>(token, { action: "list_lead_messages", lead_id: id }),
         adminFetch<{ ok: true; context: { manager_phone: string; manager_name: string; azimer_site: string } }>(
@@ -78,7 +132,19 @@ function AdminLeadViewPage() {
       ]);
       setLead(leadR.lead);
       setFiles(leadR.files ?? []);
+      setDocuments(leadR.documents ?? []);
+      setCommission(leadR.commission ?? null);
       setNotesDraft(leadR.lead.notes ?? "");
+      setFolderDraft(leadR.lead.project_folder_url ?? "");
+      setCommissionDraft({
+        commission_rate: String(leadR.commission?.commission_rate ?? leadR.lead.commission_rate ?? 0.05),
+        kp_amount: String(leadR.commission?.kp_amount ?? 0),
+        invoice_amount: String(leadR.commission?.invoice_amount ?? 0),
+        paid_amount: String(leadR.commission?.paid_amount ?? 0),
+        commission_paid: String(leadR.commission?.commission_paid ?? 0),
+        payment_status: leadR.commission?.payment_status ?? leadR.lead.payment_status ?? "not_paid",
+        notes: leadR.commission?.notes ?? leadR.lead.commission_notes ?? "",
+      });
       setTemplates(tplR.templates ?? []);
       setMessages(msgR.messages ?? []);
       setMsgContext(ctxR.context);
@@ -115,6 +181,111 @@ function AdminLeadViewPage() {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSavingNotes(false);
+    }
+  }
+
+  async function saveFolder() {
+    if (!lead) return;
+    setSavingFolder(true);
+    setActionResult(null);
+    try {
+      await adminFetch(token, {
+        action: "update_lead_deal_fields",
+        id: lead.id,
+        project_folder_url: folderDraft,
+      });
+      setActionResult("Папка сделки сохранена");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingFolder(false);
+    }
+  }
+
+  async function markTenderLead() {
+    if (!lead) return;
+    setActionResult(null);
+    try {
+      await adminFetch(token, {
+        action: "update_lead_deal_fields",
+        id: lead.id,
+        source_channel: "tender",
+        commission_eligible: true,
+        commission_rate: 0.05,
+      });
+      setActionResult("Лид отмечен как тендерный, комиссия включена");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function addDocument() {
+    if (!lead) return;
+    setSavingDocument(true);
+    setActionResult(null);
+    try {
+      await adminFetch(token, {
+        action: "add_lead_document",
+        lead_id: lead.id,
+        ...docDraft,
+      });
+      setDocDraft({
+        doc_type: "kp",
+        title: "",
+        file_url: "",
+        amount: "",
+        uploaded_by: "",
+        notes: "",
+      });
+      setActionResult("Документ добавлен");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingDocument(false);
+    }
+  }
+
+  async function sendToAccountant() {
+    if (!lead) return;
+    setSavingStatus("sent_to_accountant");
+    setActionResult(null);
+    try {
+      const r = await adminFetch<{ ok: true; delivery: string; notification_text: string; delivery_error?: string | null }>(token, {
+        action: "send_to_accountant",
+        id: lead.id,
+      });
+      setActionResult(
+        r.delivery === "manual"
+          ? `Статус обновлен. Уведомление для ручной отправки:\n${r.notification_text}`
+          : `Бухгалтеру отправлено через ${r.delivery}`,
+      );
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingStatus(null);
+    }
+  }
+
+  async function saveCommission() {
+    if (!lead) return;
+    setSavingCommission(true);
+    setActionResult(null);
+    try {
+      await adminFetch(token, {
+        action: "update_deal_commission",
+        lead_id: lead.id,
+        ...commissionDraft,
+      });
+      setActionResult("Комиссия обновлена");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingCommission(false);
     }
   }
 
@@ -237,12 +408,235 @@ function AdminLeadViewPage() {
 
       {/* Смена статуса */}
       <section className="mt-6 rounded-2xl border border-line bg-white p-5">
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-900/60">
+            Атрибуция сделки
+          </h2>
+          {lead.source_channel !== "tender" && (
+            <button
+              onClick={markTenderLead}
+              className="rounded-full border border-line px-4 py-2 text-xs font-medium text-graphite-900/70 hover:border-orange"
+            >
+              Сделать тендерным лидом
+            </button>
+          )}
+        </header>
+        <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+          <Field label="Lead ID">{lead.lead_code ?? lead.id}</Field>
+          <Field label="Канал">{SOURCE_CHANNEL_LABEL[lead.source_channel]}</Field>
+          <Field label="Источник">
+            {lead.external_source_url ? (
+              <a href={lead.external_source_url} target="_blank" rel="noopener noreferrer" className="break-all text-orange hover:underline">
+                {lead.external_source || lead.external_source_url}
+              </a>
+            ) : lead.external_source || SOURCE_LABEL[lead.source]}
+          </Field>
+          <Field label="Кем создан">{lead.created_by_system ?? lead.source}</Field>
+          <Field label="КП">{KP_STATUS_LABEL[lead.kp_status]}</Field>
+          <Field label="Договор">{CONTRACT_STATUS_LABEL[lead.contract_status]}</Field>
+          <Field label="Счет">{INVOICE_STATUS_LABEL[lead.invoice_status]}</Field>
+          <Field label="Оплата">{PAYMENT_STATUS_LABEL[lead.payment_status]}</Field>
+          <Field label="Комиссия">
+            {lead.commission_eligible ? `да, ${formatPercent(lead.commission_rate)}` : "нет"}
+          </Field>
+        </dl>
+
+        <div className="mt-4 flex flex-col gap-2 border-t border-line pt-4 sm:flex-row">
+          <input
+            value={folderDraft}
+            onChange={(e) => setFolderDraft(e.target.value)}
+            placeholder="Ссылка на папку сделки в Google Drive"
+            className="min-w-0 flex-1 rounded-xl border border-line bg-light/30 px-3 py-2 text-sm focus:border-orange focus:bg-white focus:outline-none"
+          />
+          <button
+            onClick={saveFolder}
+            disabled={savingFolder}
+            className="rounded-full bg-graphite-950 px-4 py-2 text-xs font-semibold text-light disabled:opacity-50"
+          >
+            {savingFolder ? "..." : "Сохранить папку"}
+          </button>
+          {lead.project_folder_url && (
+            <a
+              href={lead.project_folder_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-full border border-line px-4 py-2 text-center text-xs font-medium text-orange hover:bg-light"
+            >
+              Открыть Drive
+            </a>
+          )}
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-line bg-white p-5">
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-900/60">
+            Документы
+          </h2>
+          <button
+            onClick={sendToAccountant}
+            disabled={savingStatus === "sent_to_accountant"}
+            className="rounded-full bg-orange px-4 py-2 text-xs font-semibold text-white hover:bg-orange-bright disabled:opacity-50"
+          >
+            {savingStatus === "sent_to_accountant" ? "..." : "Отправить бухгалтеру"}
+          </button>
+        </header>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-[140px_1fr_1fr_120px]">
+          <select
+            value={docDraft.doc_type}
+            onChange={(e) => setDocDraft((d) => ({ ...d, doc_type: e.target.value as LeadDocumentType }))}
+            className="rounded-xl border border-line bg-light/30 px-3 py-2 text-sm focus:border-orange focus:bg-white focus:outline-none"
+          >
+            {DOC_TYPES.map((t) => (
+              <option key={t} value={t}>{DOCUMENT_TYPE_LABEL[t]}</option>
+            ))}
+          </select>
+          <input
+            value={docDraft.title}
+            onChange={(e) => setDocDraft((d) => ({ ...d, title: e.target.value }))}
+            placeholder="Название документа"
+            className="rounded-xl border border-line bg-light/30 px-3 py-2 text-sm focus:border-orange focus:bg-white focus:outline-none"
+          />
+          <input
+            value={docDraft.file_url}
+            onChange={(e) => setDocDraft((d) => ({ ...d, file_url: e.target.value }))}
+            placeholder="Google Drive URL"
+            className="rounded-xl border border-line bg-light/30 px-3 py-2 text-sm focus:border-orange focus:bg-white focus:outline-none"
+          />
+          <input
+            value={docDraft.amount}
+            onChange={(e) => setDocDraft((d) => ({ ...d, amount: e.target.value }))}
+            placeholder="Сумма"
+            className="rounded-xl border border-line bg-light/30 px-3 py-2 text-sm focus:border-orange focus:bg-white focus:outline-none"
+          />
+          <input
+            value={docDraft.uploaded_by}
+            onChange={(e) => setDocDraft((d) => ({ ...d, uploaded_by: e.target.value }))}
+            placeholder="Кто добавил"
+            className="rounded-xl border border-line bg-light/30 px-3 py-2 text-sm focus:border-orange focus:bg-white focus:outline-none md:col-span-1"
+          />
+          <input
+            value={docDraft.notes}
+            onChange={(e) => setDocDraft((d) => ({ ...d, notes: e.target.value }))}
+            placeholder="Комментарий"
+            className="rounded-xl border border-line bg-light/30 px-3 py-2 text-sm focus:border-orange focus:bg-white focus:outline-none md:col-span-2"
+          />
+          <button
+            onClick={addDocument}
+            disabled={savingDocument || !docDraft.title.trim() || !docDraft.file_url.trim()}
+            className="rounded-full bg-graphite-950 px-4 py-2 text-xs font-semibold text-light disabled:opacity-50"
+          >
+            {savingDocument ? "..." : "Добавить"}
+          </button>
+        </div>
+
+        {documents.length > 0 ? (
+          <ul className="mt-4 divide-y divide-line rounded-xl border border-line">
+            {documents.map((doc) => (
+              <li key={doc.id} className="grid gap-2 p-3 text-sm md:grid-cols-[120px_1fr_140px_120px] md:items-center">
+                <span className="text-xs font-medium uppercase tracking-wider text-graphite-900/50">
+                  {DOCUMENT_TYPE_LABEL[doc.doc_type]}
+                </span>
+                <div className="min-w-0">
+                  {doc.file_url ? (
+                    <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="truncate text-orange hover:underline">
+                      {doc.title}
+                    </a>
+                  ) : (
+                    <span>{doc.title}</span>
+                  )}
+                  {doc.notes && <div className="mt-0.5 text-xs text-graphite-900/45">{doc.notes}</div>}
+                </div>
+                <span className="font-mono text-xs text-graphite-900/60">{doc.amount != null ? fmtRub(doc.amount) : "—"}</span>
+                <span className="text-xs text-graphite-900/45">{fmtDateTime(doc.created_at)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-4 rounded-xl bg-light p-4 text-sm text-graphite-900/45">
+            Документов пока нет. На MVP добавляем ссылки на Google Drive.
+          </p>
+        )}
+      </section>
+
+      {lead.source_channel === "tender" && (
+        <section className="mt-6 rounded-2xl border border-line bg-white p-5">
+          <header className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-900/60">
+              Комиссия по тендеру
+            </h2>
+            {!lead.commission_eligible && (
+              <button
+                onClick={markTenderLead}
+                className="rounded-full border border-line px-4 py-2 text-xs font-medium text-graphite-900/70 hover:border-orange"
+              >
+                Включить 5%
+              </button>
+            )}
+          </header>
+          {lead.commission_eligible ? (
+            <>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <MoneyInput label="Ставка" value={commissionDraft.commission_rate} onChange={(v) => setCommissionDraft((d) => ({ ...d, commission_rate: v }))} />
+                <MoneyInput label="Сумма КП" value={commissionDraft.kp_amount} onChange={(v) => setCommissionDraft((d) => ({ ...d, kp_amount: v }))} />
+                <MoneyInput label="Сумма счета" value={commissionDraft.invoice_amount} onChange={(v) => setCommissionDraft((d) => ({ ...d, invoice_amount: v }))} />
+                <MoneyInput label="Оплачено" value={commissionDraft.paid_amount} onChange={(v) => setCommissionDraft((d) => ({ ...d, paid_amount: v }))} />
+                <MoneyInput label="Комиссия выплачена" value={commissionDraft.commission_paid} onChange={(v) => setCommissionDraft((d) => ({ ...d, commission_paid: v }))} />
+                <label className="grid gap-1 text-xs uppercase tracking-wider text-graphite-900/40">
+                  Оплата
+                  <select
+                    value={commissionDraft.payment_status}
+                    onChange={(e) => setCommissionDraft((d) => ({ ...d, payment_status: e.target.value as "not_paid" | "partial" | "paid" }))}
+                    className="rounded-xl border border-line bg-light/30 px-3 py-2 text-sm normal-case tracking-normal text-graphite-900 focus:border-orange focus:bg-white focus:outline-none"
+                  >
+                    <option value="not_paid">нет</option>
+                    <option value="partial">частично</option>
+                    <option value="paid">оплачено</option>
+                  </select>
+                </label>
+              </div>
+              <textarea
+                value={commissionDraft.notes}
+                onChange={(e) => setCommissionDraft((d) => ({ ...d, notes: e.target.value }))}
+                placeholder="Заметки по комиссии"
+                rows={2}
+                className="mt-3 w-full rounded-xl border border-line bg-light/30 px-3 py-2 text-sm focus:border-orange focus:bg-white focus:outline-none"
+              />
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-graphite-900/60">
+                  К выплате: <span className="font-mono text-graphite-900">{fmtRub(commission?.commission_due ?? Number(commissionDraft.paid_amount || 0) * Number(commissionDraft.commission_rate || 0))}</span>
+                </p>
+                <button
+                  onClick={saveCommission}
+                  disabled={savingCommission}
+                  className="rounded-full bg-graphite-950 px-4 py-2 text-xs font-semibold text-light disabled:opacity-50"
+                >
+                  {savingCommission ? "..." : "Сохранить комиссию"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="mt-4 text-sm text-graphite-900/50">
+              Тендерный канал включен, но комиссия пока не отмечена.
+            </p>
+          )}
+        </section>
+      )}
+
+      {actionResult && (
+        <div className="mt-6 whitespace-pre-wrap rounded-2xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">
+          {actionResult}
+        </div>
+      )}
+
+      <section className="mt-6 rounded-2xl border border-line bg-white p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-900/60">
           Статус
         </h2>
         <div className="mt-3 flex flex-wrap gap-2">
           {STATUSES.map((s) => {
-            const active = lead.status === s;
+            const active = (lead.deal_status ?? lead.status) === s;
             const isLoading = savingStatus === s;
             return (
               <button
@@ -639,6 +1033,25 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <dd className="text-sm text-graphite-900 break-words">{children}</dd>
     </div>
   );
+}
+
+function MoneyInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="grid gap-1 text-xs uppercase tracking-wider text-graphite-900/40">
+      {label}
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        inputMode="decimal"
+        className="rounded-xl border border-line bg-light/30 px-3 py-2 text-sm normal-case tracking-normal text-graphite-900 focus:border-orange focus:bg-white focus:outline-none"
+      />
+    </label>
+  );
+}
+
+function formatPercent(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "0%";
+  return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(value * 100)}%`;
 }
 
 function formatVal(v: unknown): string {
