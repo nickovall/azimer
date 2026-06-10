@@ -757,6 +757,106 @@ Deno.serve(async (req) => {
     return json({ ok: true, lead: data });
   }
 
+  // Закрыть сделку одним движением — выиграли или отказали.
+  // outcome=won: проставляет договор/счёт/оплату по фактам, продвигает в paid_partial/paid_full/commission_paid,
+  //   обновляет deal_commissions, кладёт документ-маркер «Закрытие».
+  // outcome=lost: status=lost, добавляет причину в notes.
+  if (action === "close_lead") {
+    const id = body.id as string | undefined;
+    const outcome = body.outcome as "won" | "lost" | undefined;
+    if (!id) return json({ error: "Need id" }, 400);
+    if (outcome !== "won" && outcome !== "lost") return json({ error: "outcome must be won|lost" }, 400);
+
+    const leadR = await sb
+      .from("leads")
+      .select("id, lead_code, notes, source_channel, commission_eligible, commission_rate")
+      .eq("id", id)
+      .single();
+    if (leadR.error || !leadR.data) return json({ error: leadR.error?.message ?? "Lead not found" }, 404);
+
+    if (outcome === "lost") {
+      const reason = nullableString(body.reason);
+      const note = nullableString(body.note);
+      const newLines = [reason ? `Причина отказа: ${reason}` : null, note].filter(Boolean).join("\n\n");
+      const combined = [leadR.data.notes, newLines].filter(Boolean).join("\n\n");
+      const { error } = await sb.from("leads").update({
+        status: "lost",
+        deal_status: "lost",
+        notes: combined || null,
+      }).eq("id", id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true, status: "lost" });
+    }
+
+    // outcome=won
+    const finalAmount = optionalNumber(body.final_amount);
+    const paidAmount = optionalNumber(body.paid_amount);
+    const contractDate = nullableString(body.contract_date);
+    const note = nullableString(body.note);
+
+    const finalN = finalAmount ?? 0;
+    const paidN = paidAmount ?? 0;
+
+    let newStatus: string;
+    let paymentStatus: string;
+    if (finalN > 0 && paidN >= finalN) {
+      newStatus = leadR.data.source_channel === "tender" && leadR.data.commission_eligible
+        ? "commission_paid"
+        : "paid_full";
+      paymentStatus = "paid";
+    } else if (paidN > 0) {
+      newStatus = "paid_partial";
+      paymentStatus = "partial";
+    } else {
+      newStatus = "won";
+      paymentStatus = "not_paid";
+    }
+
+    const leadPatch: Record<string, unknown> = {
+      status: newStatus,
+      deal_status: newStatus,
+      contract_status: "signed",
+      invoice_status: "issued",
+      payment_status: paymentStatus,
+    };
+    if (note) {
+      const combined = [leadR.data.notes, `Закрытие сделки: ${note}`].filter(Boolean).join("\n\n");
+      leadPatch.notes = combined;
+    }
+    const { error: upErr } = await sb.from("leads").update(leadPatch).eq("id", id);
+    if (upErr) return json({ error: upErr.message }, 500);
+
+    // Маркер закрытия в lead_documents — чтобы было видно когда и с какими цифрами закрыли
+    await sb.from("lead_documents").insert({
+      lead_id: id,
+      lead_code: leadR.data.lead_code,
+      doc_type: "other",
+      title: contractDate
+        ? `Закрытие сделки · договор ${contractDate}`
+        : "Закрытие сделки",
+      storage_provider: "other",
+      amount: finalN > 0 ? finalN : null,
+      currency: "RUB",
+      uploaded_by: "admin",
+      notes: note,
+    });
+
+    // Тендер с комиссией — синхронизируем deal_commissions
+    if (leadR.data.source_channel === "tender" && leadR.data.commission_eligible) {
+      await sb.from("deal_commissions").upsert({
+        lead_id: id,
+        lead_code: leadR.data.lead_code,
+        commission_rate: leadR.data.commission_rate || 0.0500,
+        kp_amount: finalN,
+        invoice_amount: finalN,
+        paid_amount: paidN,
+        payment_status: paymentStatus,
+      }, { onConflict: "lead_id" });
+    }
+
+    return json({ ok: true, status: newStatus, payment_status: paymentStatus });
+  }
+
   if (action === "add_lead_document") {
     const leadId = body.lead_id as string | undefined;
     const docType = body.doc_type as string | undefined;

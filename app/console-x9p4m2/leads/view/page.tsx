@@ -106,6 +106,10 @@ function AdminLeadViewPage() {
   });
   const [savingCommission, setSavingCommission] = useState(false);
 
+  // День 5 — модалка закрытия сделки
+  const [closeModalOpen, setCloseModalOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
+
   // ── Отправка сообщений ──
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
   const [messages, setMessages] = useState<LeadMessage[]>([]);
@@ -438,15 +442,25 @@ function AdminLeadViewPage() {
               {NEXT_STEP_HINT[currentStatus]}
             </h2>
           </div>
-          {nextStatus && nextStepLabel && (
-            <button
-              onClick={() => changeStatus(nextStatus)}
-              disabled={savingStatus !== null}
-              className="rounded-full bg-orange px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-bright disabled:opacity-50"
-            >
-              {savingStatus === nextStatus ? "..." : nextStepLabel}
-            </button>
-          )}
+          <div className="flex flex-wrap gap-2">
+            {nextStatus && nextStepLabel && (
+              <button
+                onClick={() => changeStatus(nextStatus)}
+                disabled={savingStatus !== null}
+                className="rounded-full bg-orange px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-bright disabled:opacity-50"
+              >
+                {savingStatus === nextStatus ? "..." : nextStepLabel}
+              </button>
+            )}
+            {currentStatus !== "commission_paid" && currentStatus !== "lost" && (
+              <button
+                onClick={() => setCloseModalOpen(true)}
+                className="rounded-full border-2 border-graphite-950 bg-white px-5 py-2 text-sm font-semibold text-graphite-900 transition-colors hover:bg-graphite-950 hover:text-light"
+              >
+                Закрыть сделку
+              </button>
+            )}
+          </div>
         </div>
       </section>
 
@@ -1064,6 +1078,227 @@ function AdminLeadViewPage() {
           </ul>
         </section>
       )}
+
+      {closeModalOpen && (
+        <CloseDealModal
+          lead={lead}
+          token={token}
+          closing={closing}
+          setClosing={setClosing}
+          onClose={() => setCloseModalOpen(false)}
+          onDone={async () => {
+            setCloseModalOpen(false);
+            await load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function CloseDealModal({
+  lead, token, closing, setClosing, onClose, onDone,
+}: {
+  lead: LeadFull;
+  token: string;
+  closing: boolean;
+  setClosing: (b: boolean) => void;
+  onClose: () => void;
+  onDone: () => void | Promise<void>;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [outcome, setOutcome] = useState<"won" | "lost">("won");
+  const [finalAmount, setFinalAmount] = useState<string>(() => {
+    const kp = (lead as any).commission?.kp_amount ?? (lead as any).doc_summary?.kp_amount ?? "";
+    return kp ? String(kp) : "";
+  });
+  const [paidAmount, setPaidAmount] = useState<string>("");
+  const [contractDate, setContractDate] = useState(today);
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+
+  async function handleSubmit() {
+    setClosing(true);
+    setErr(null);
+    try {
+      const payload: { action: string; [k: string]: unknown } = {
+        action: "close_lead",
+        id: lead.id,
+        outcome,
+      };
+      if (outcome === "won") {
+        payload.final_amount = finalAmount ? Number(finalAmount) : null;
+        payload.paid_amount = paidAmount ? Number(paidAmount) : null;
+        payload.contract_date = contractDate || null;
+        payload.note = note || null;
+      } else {
+        payload.reason = reason || null;
+        payload.note = note || null;
+      }
+      await adminFetch(token, payload);
+      await onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setClosing(false);
+    }
+  }
+
+  const finalN = Number(finalAmount) || 0;
+  const paidN = Number(paidAmount) || 0;
+  const previewStatus = finalN > 0 && paidN >= finalN
+    ? (lead.source_channel === "tender" && lead.commission_eligible ? "Закрыто (комиссия выплачена)" : "Оплачено полностью")
+    : paidN > 0
+    ? "Оплачено частично"
+    : "Договор подписан";
+
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-end justify-center bg-graphite-950/40 backdrop-blur-sm sm:items-center"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-lg overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+      >
+        <header className="border-b border-line px-5 py-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-graphite-900/50">
+                {lead.lead_code ?? lead.id.slice(0, 8)}
+              </p>
+              <h2 className="mt-0.5 text-lg font-bold text-graphite-900">
+                Закрыть сделку
+              </h2>
+              <p className="mt-0.5 text-xs text-graphite-900/60">{lead.company || lead.name}</p>
+            </div>
+            <button onClick={onClose} className="text-graphite-900/50 hover:text-graphite-900">✕</button>
+          </div>
+        </header>
+
+        <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+          {/* Тоггл исхода */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setOutcome("won")}
+              className={`rounded-xl border-2 px-4 py-3 text-sm font-semibold transition-colors ${
+                outcome === "won"
+                  ? "border-green-500 bg-green-50 text-green-900"
+                  : "border-line bg-white text-graphite-900/60 hover:border-green-300"
+              }`}
+            >
+              ✅ Выиграли
+            </button>
+            <button
+              onClick={() => setOutcome("lost")}
+              className={`rounded-xl border-2 px-4 py-3 text-sm font-semibold transition-colors ${
+                outcome === "lost"
+                  ? "border-red-500 bg-red-50 text-red-900"
+                  : "border-line bg-white text-graphite-900/60 hover:border-red-300"
+              }`}
+            >
+              ❌ Отказали
+            </button>
+          </div>
+
+          {outcome === "won" ? (
+            <>
+              <label className="block">
+                <span className="text-xs uppercase tracking-wider text-graphite-900/45">Финальная сумма договора, ₽</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={finalAmount}
+                  onChange={(e) => setFinalAmount(e.target.value)}
+                  placeholder="4 800 000"
+                  className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2.5 text-base tabular-nums focus:border-orange focus:outline-none"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-xs uppercase tracking-wider text-graphite-900/45">Дата подписания договора</span>
+                <input
+                  type="date"
+                  value={contractDate}
+                  onChange={(e) => setContractDate(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2.5 text-base focus:border-orange focus:outline-none"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-xs uppercase tracking-wider text-graphite-900/45">Оплачено уже, ₽</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={paidAmount}
+                  onChange={(e) => setPaidAmount(e.target.value)}
+                  placeholder="0 — если оплата ещё не пришла"
+                  className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2.5 text-base tabular-nums focus:border-orange focus:outline-none"
+                />
+                <p className="mt-1 text-xs text-graphite-900/45">
+                  Оставь 0 если оплата ещё впереди. Когда придёт — закроешь второй раз с полной суммой.
+                </p>
+              </label>
+
+              <div className="rounded-xl bg-orange/5 border border-orange/30 p-3 text-sm">
+                <p className="text-xs uppercase tracking-wider text-graphite-900/60">После закрытия:</p>
+                <p className="mt-1 font-semibold text-graphite-900">{previewStatus}</p>
+                {lead.source_channel === "tender" && lead.commission_eligible && paidN > 0 && (
+                  <p className="mt-1 text-xs text-graphite-900/60 font-mono">
+                    Комиссия: {fmtRub(paidN * (lead.commission_rate || 0.05))}
+                  </p>
+                )}
+              </div>
+            </>
+          ) : (
+            <label className="block">
+              <span className="text-xs uppercase tracking-wider text-graphite-900/45">Причина отказа</span>
+              <input
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Дорого, выбрали другого, сроки, и т.д."
+                className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2.5 text-base focus:border-orange focus:outline-none"
+              />
+              <p className="mt-1 text-xs text-graphite-900/45">
+                Сохраняется в заметках для аналитики. Не обязательно.
+              </p>
+            </label>
+          )}
+
+          <label className="block">
+            <span className="text-xs uppercase tracking-wider text-graphite-900/45">Комментарий (опционально)</span>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              placeholder="Любая важная деталь"
+              className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm focus:border-orange focus:outline-none"
+            />
+          </label>
+
+          {err && <p className="text-sm text-red-700">{err}</p>}
+        </div>
+
+        <footer className="flex justify-end gap-2 border-t border-line bg-light/30 px-5 py-3">
+          <button
+            onClick={onClose}
+            disabled={closing}
+            className="rounded-full border border-line bg-white px-5 py-2 text-sm font-medium text-graphite-900/70 hover:border-graphite-950"
+          >
+            Отмена
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={closing || (outcome === "won" && !finalAmount)}
+            className={`rounded-full px-5 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-50 ${
+              outcome === "won" ? "bg-green-600 hover:bg-green-700" : "bg-graphite-950 hover:bg-red-700"
+            }`}
+          >
+            {closing ? "..." : outcome === "won" ? "✅ Закрыть как выигрыш" : "❌ Закрыть как отказ"}
+          </button>
+        </footer>
+      </div>
     </div>
   );
 }
