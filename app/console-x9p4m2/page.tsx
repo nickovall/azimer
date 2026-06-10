@@ -1,37 +1,54 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAdmin } from "@/components/admin/AdminShell";
 import {
   adminFetch,
-  fmtDateTime,
   fmtRub,
-  STATUS_COLOR,
-  STATUS_LABEL,
-  SOURCE_LABEL,
-  type DashboardStats,
+  type LeadRow,
   type LeadStatus,
 } from "@/lib/admin-api";
+import {
+  computeUrgency,
+  NEXT_STEP_HINT,
+  STATUS_FRIENDLY,
+  STATUS_TO_COLUMN,
+  URGENCY_BORDER,
+  URGENCY_DOT,
+  type Urgency,
+} from "@/lib/admin-pipeline";
+
+const DAYS_30 = 30 * 86_400_000;
+const DAYS_7 = 7 * 86_400_000;
+
+type DayPart = "morning" | "day" | "evening" | "night";
 
 export default function AdminDashboardPage() {
   const { token } = useAdmin();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [leads, setLeads] = useState<LeadRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    adminFetch<{ ok: true; stats: DashboardStats }>(token, { action: "dashboard_stats" })
-      .then((r) => { if (!cancelled) setStats(r.stats); })
+    adminFetch<{ ok: true; leads: LeadRow[]; total: number }>(token, {
+      action: "list_leads",
+      limit: 500,
+    })
+      .then((r) => { if (!cancelled) setLeads(r.leads); })
       .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [token]);
 
+  const grouped = useMemo(() => groupByUrgency(leads), [leads]);
+  const money = useMemo(() => computeMoney(leads), [leads]);
+  const greeting = useMemo(() => getGreeting(), []);
+
   if (loading) {
-    return <p className="py-16 text-center text-graphite-900/40">Загружаем статистику…</p>;
+    return <p className="py-16 text-center text-graphite-900/40">Загружаем…</p>;
   }
 
   if (error) {
@@ -42,174 +59,318 @@ export default function AdminDashboardPage() {
     );
   }
 
-  if (!stats) return null;
-
-  const conv = stats.total > 0
-    ? Math.round(((stats.byStatus.won ?? 0) / stats.total) * 100)
-    : 0;
-
   return (
     <div>
-      <div className="border-b border-line pb-5">
-        <p className="font-mono text-xs uppercase tracking-[0.2em] text-orange">Дашборд</p>
-        <h1 className="mt-1 text-3xl font-bold text-graphite-900">Воронка заявок</h1>
+      {/* Привет + сегодняшний день */}
+      <header className="border-b border-line pb-5">
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-orange">
+          {formatDate()}
+        </p>
+        <h1 className="mt-1 text-3xl font-bold text-graphite-900">
+          {greeting}, Азамат
+        </h1>
         <p className="mt-1 text-sm text-graphite-900/60">
-          Сводка по активности · все цифры считаются в реальном времени
+          {leads.length === 0
+            ? "Заявок пока нет — ждём первых лидов"
+            : summarizeDay(grouped)}
         </p>
-      </div>
+      </header>
 
-      {/* Числовые карточки */}
+      {/* Деньги */}
       <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatCard label="Сегодня" value={stats.today} sub="заявок" />
-        <StatCard label="7 дней" value={stats.week} sub="заявок" />
-        <StatCard label="30 дней" value={stats.month} sub="заявок" />
-        <StatCard label="Всего" value={stats.total} sub={`конверсия ${conv}%`} />
+        <MoneyCard
+          label="В работе"
+          value={money.inWorkAmount}
+          sub={`${money.inWorkCount} сделок`}
+        />
+        <MoneyCard
+          label="За 30 дней"
+          value={money.closed30Amount}
+          sub={`${money.closed30Count} закрыто`}
+          accent={money.closed30Count > 0}
+        />
+        <MoneyCard
+          label="Комиссия"
+          value={money.commissionDue}
+          sub="к получению"
+          accent={money.commissionDue > 0}
+        />
+        <MoneyCard
+          label="За 7 дней"
+          value={money.new7Count}
+          sub="новых заявок"
+          isCount
+        />
       </div>
 
-      <div className="mt-6 grid gap-6 md:grid-cols-2">
-        {/* Воронка по статусам */}
-        <section className="rounded-2xl border border-line bg-white p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-900/60">
-            По статусам
-          </h2>
-          <div className="mt-3 space-y-2">
-            {(["new", "contacted", "kp_sent", "won", "lost"] as LeadStatus[]).map((s) => {
-              const n = stats.byStatus[s] ?? 0;
-              const pct = stats.total > 0 ? Math.round((n / stats.total) * 100) : 0;
-              return (
-                <div key={s} className="flex items-center gap-3">
-                  <div className={`w-32 shrink-0 rounded-full px-3 py-1 text-xs font-medium ${STATUS_COLOR[s]}`}>
-                    {STATUS_LABEL[s]}
-                  </div>
-                  <div className="flex-1">
-                    <div className="h-2 overflow-hidden rounded-full bg-light">
-                      <div
-                        className="h-full bg-orange"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div className="w-16 text-right font-mono text-sm tabular-nums">
-                    {n}
-                    <span className="ml-1 text-xs text-graphite-900/40">{pct}%</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
+      {/* Срочно */}
+      <UrgencyBlock
+        title="🔴 Срочно"
+        subtitle="Дедлайны прошли или клиент молчит больше недели"
+        leads={grouped.urgent}
+        color="red"
+      />
 
-        {/* Топ-источники */}
-        <section className="rounded-2xl border border-line bg-white p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-900/60">
-            Источники
-          </h2>
-          {stats.topSources.length === 0 ? (
-            <p className="mt-3 text-sm text-graphite-900/40">Ещё нет данных</p>
-          ) : (
-            <div className="mt-3 space-y-2">
-              {stats.topSources.map((s) => (
-                <div key={s.source} className="flex items-center justify-between text-sm">
-                  <div className="truncate text-graphite-900/80">{prettySource(s.source)}</div>
-                  <div className="font-mono text-graphite-900/60">{s.count}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+      {/* На тебе */}
+      <UrgencyBlock
+        title="🟡 На тебе"
+        subtitle="Ждут твоего действия"
+        leads={grouped.on_you}
+        color="amber"
+      />
+
+      {/* Ждём */}
+      <UrgencyBlock
+        title="🔵 Ждём"
+        subtitle="В ответ от клиента или бухгалтера"
+        leads={grouped.waiting}
+        color="sky"
+        defaultClosed
+      />
+
+      {/* Архив — свёрнут */}
+      {grouped.archived.length > 0 && (
+        <UrgencyBlock
+          title="⚪ Архив"
+          subtitle="Закрытые сделки и отказы"
+          leads={grouped.archived}
+          color="gray"
+          defaultClosed
+        />
+      )}
+
+      <div className="mt-8 flex justify-end">
+        <Link
+          href="/console-x9p4m2/leads/"
+          className="text-xs text-orange hover:underline"
+        >
+          Открыть всю воронку →
+        </Link>
       </div>
-
-      {/* Средний чек */}
-      <section className="mt-6 rounded-2xl border border-line bg-white p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-900/60">
-          Средний чек по выданным расчётам
-        </h2>
-        <p className="mt-2 text-3xl font-bold text-graphite-900">
-          {stats.avgTicketCount > 0 ? fmtRub(stats.avgTicket) : "—"}
-        </p>
-        <p className="mt-1 text-xs text-graphite-900/40">
-          {stats.avgTicketCount > 0
-            ? `Среднее по ${stats.avgTicketCount} расчёту${plural(stats.avgTicketCount, ["", "ам", "ам"])}`
-            : "Пока нет расчётов в заявках"}
-        </p>
-      </section>
-
-      {/* Последние 10 заявок */}
-      <section className="mt-6 rounded-2xl border border-line bg-white">
-        <header className="flex items-center justify-between border-b border-line px-5 py-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-900/60">
-            Последние заявки
-          </h2>
-          <Link href="/console-x9p4m2/leads/" className="text-xs text-orange hover:underline">
-            Все заявки →
-          </Link>
-        </header>
-        {stats.recent.length === 0 ? (
-          <p className="p-12 text-center text-sm text-graphite-900/40">Заявок пока нет</p>
-        ) : (
-          <table className="w-full text-sm">
-            <tbody>
-              {stats.recent.map((lead) => (
-                <tr key={lead.id} className="border-b border-line/40 last:border-0 hover:bg-light/50">
-                  <td className="px-5 py-2.5 text-xs text-graphite-900/50 tabular-nums">
-                    {fmtDateTime(lead.created_at)}
-                  </td>
-                  <td className="px-2 py-2.5">
-                    <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_COLOR[lead.status]}`}>
-                      {STATUS_LABEL[lead.status]}
-                    </span>
-                  </td>
-                  <td className="px-2 py-2.5 text-xs text-graphite-900/60">
-                    {SOURCE_LABEL[lead.source]}
-                  </td>
-                  <td className="px-2 py-2.5 font-medium text-graphite-900">{lead.name}</td>
-                  <td className="px-2 py-2.5 font-mono text-xs text-graphite-900/70">{lead.phone}</td>
-                  <td className="px-5 py-2.5 text-right">
-                    <Link
-                      href={`/console-x9p4m2/leads/view/?id=${lead.id}`}
-                      className="text-xs text-orange hover:underline"
-                    >
-                      Открыть →
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
     </div>
   );
 }
 
-function StatCard({ label, value, sub }: { label: string; value: number; sub?: string }) {
+// ═══════════════════════════════════════════════════════════════
+//   Карточки денег + блоки лидов
+// ═══════════════════════════════════════════════════════════════
+
+function MoneyCard({
+  label, value, sub, accent, isCount,
+}: {
+  label: string;
+  value: number;
+  sub?: string;
+  accent?: boolean;
+  isCount?: boolean;
+}) {
   return (
-    <div className="rounded-2xl border border-line bg-white p-4">
+    <div className={`rounded-2xl border p-4 ${accent ? "border-orange/40 bg-orange/5" : "border-line bg-white"}`}>
       <p className="text-xs uppercase tracking-wider text-graphite-900/50">{label}</p>
-      <p className="mt-1 text-3xl font-bold text-graphite-900 tabular-nums">{value}</p>
+      <p className="mt-1 text-2xl font-bold text-graphite-900 tabular-nums">
+        {isCount ? value : value > 0 ? fmtRub(value) : "—"}
+      </p>
       {sub && <p className="mt-1 text-xs text-graphite-900/40">{sub}</p>}
     </div>
   );
 }
 
-function prettySource(src: string): string {
-  if (src.startsWith("direct:")) {
-    const inner = src.slice(7);
-    const map: Record<string, string> = {
-      contact:  "🟢 Прямой · форма",
-      estimate: "🟢 Прямой · калькулятор",
-      project:  "🟢 Прямой · проект",
-      partner:  "🟢 Прямой · партнёрство",
-    };
-    return map[inner] ?? `🟢 Прямой · ${inner}`;
-  }
-  return src;
+function UrgencyBlock({
+  title, subtitle, leads, color, defaultClosed,
+}: {
+  title: string;
+  subtitle: string;
+  leads: LeadRow[];
+  color: "red" | "amber" | "sky" | "gray";
+  defaultClosed?: boolean;
+}) {
+  if (leads.length === 0) return null;
+  const headerBg = {
+    red: "bg-red-50",
+    amber: "bg-amber-50",
+    sky: "bg-sky-50",
+    gray: "bg-gray-50",
+  }[color];
+
+  const Shown = ({ children }: { children: React.ReactNode }) => defaultClosed ? (
+    <details className="mt-6 overflow-hidden rounded-2xl border border-line bg-white">
+      <summary className={`cursor-pointer flex items-center justify-between px-5 py-3 ${headerBg}`}>
+        <div>
+          <h2 className="text-sm font-bold text-graphite-900">{title}</h2>
+          <p className="mt-0.5 text-xs text-graphite-900/60">{subtitle}</p>
+        </div>
+        <span className="rounded-full bg-white px-2 py-0.5 font-mono text-xs tabular-nums">{leads.length}</span>
+      </summary>
+      <div className="border-t border-line">{children}</div>
+    </details>
+  ) : (
+    <section className="mt-6 overflow-hidden rounded-2xl border border-line bg-white">
+      <header className={`flex items-center justify-between px-5 py-3 ${headerBg}`}>
+        <div>
+          <h2 className="text-sm font-bold text-graphite-900">{title}</h2>
+          <p className="mt-0.5 text-xs text-graphite-900/60">{subtitle}</p>
+        </div>
+        <span className="rounded-full bg-white px-2 py-0.5 font-mono text-xs tabular-nums">{leads.length}</span>
+      </header>
+      <div className="border-t border-line">{children}</div>
+    </section>
+  );
+
+  const showLimit = 6;
+  const visible = leads.slice(0, showLimit);
+  const rest = leads.length - visible.length;
+
+  return (
+    <Shown>
+      <ul className="divide-y divide-line/60">
+        {visible.map((lead) => (
+          <DashboardLeadRow key={lead.id} lead={lead} />
+        ))}
+      </ul>
+      {rest > 0 && (
+        <div className="border-t border-line px-5 py-2 text-center">
+          <Link
+            href="/console-x9p4m2/leads/"
+            className="text-xs text-orange hover:underline"
+          >
+            Ещё {rest} в воронке →
+          </Link>
+        </div>
+      )}
+    </Shown>
+  );
 }
 
-function plural(n: number, forms: [string, string, string]): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return forms[0];
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return forms[1];
-  return forms[2];
+function DashboardLeadRow({ lead }: { lead: LeadRow }) {
+  const status = (lead.deal_status ?? lead.status) as LeadStatus;
+  const urgency = computeUrgency({ status, statusUpdatedAt: lead.status_updated_at });
+  const customer = lead.company || lead.name || "Без имени";
+  const kpAmount = lead.commission?.kp_amount || lead.doc_summary?.kp_amount;
+  const days = lead.status_updated_at
+    ? Math.floor((Date.now() - new Date(lead.status_updated_at).getTime()) / 86_400_000)
+    : 0;
+
+  return (
+    <li>
+      <Link
+        href={`/console-x9p4m2/leads/view/?id=${lead.id}`}
+        className={`block px-5 py-3 transition-colors hover:bg-light/50 ${URGENCY_BORDER[urgency]}`}
+      >
+        <div className="flex items-start gap-3">
+          <span className={`mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full ${URGENCY_DOT[urgency]}`} />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-graphite-900">
+              {NEXT_STEP_HINT[status]}
+            </p>
+            <p className="mt-0.5 truncate text-xs text-graphite-900/60">
+              {customer} · {STATUS_FRIENDLY[status]}
+              {days > 0 && (
+                <span className={days >= 7 ? "ml-2 font-semibold text-red-700" : "ml-2"}>
+                  · {days === 1 ? "вчера" : `${days} дн.`}
+                </span>
+              )}
+            </p>
+          </div>
+          {kpAmount && (
+            <span className="shrink-0 font-mono text-xs tabular-nums text-graphite-900/70">
+              {fmtRub(kpAmount)}
+            </span>
+          )}
+        </div>
+      </Link>
+    </li>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//   Хелперы
+// ═══════════════════════════════════════════════════════════════
+
+function groupByUrgency(leads: LeadRow[]): Record<Urgency, LeadRow[]> {
+  const groups: Record<Urgency, LeadRow[]> = {
+    urgent: [],
+    on_you: [],
+    waiting: [],
+    archived: [],
+  };
+  for (const lead of leads) {
+    const status = (lead.deal_status ?? lead.status) as LeadStatus;
+    const urgency = computeUrgency({ status, statusUpdatedAt: lead.status_updated_at });
+    groups[urgency].push(lead);
+  }
+  // Внутри каждой группы — самые старые сверху (где висим дольше — те важнее)
+  for (const key of Object.keys(groups) as Urgency[]) {
+    groups[key].sort((a, b) => {
+      const ta = a.status_updated_at ? new Date(a.status_updated_at).getTime() : 0;
+      const tb = b.status_updated_at ? new Date(b.status_updated_at).getTime() : 0;
+      return ta - tb;
+    });
+  }
+  return groups;
+}
+
+function computeMoney(leads: LeadRow[]) {
+  const now = Date.now();
+  let inWorkAmount = 0;
+  let inWorkCount = 0;
+  let closed30Amount = 0;
+  let closed30Count = 0;
+  let commissionDue = 0;
+  let new7Count = 0;
+
+  for (const lead of leads) {
+    const status = (lead.deal_status ?? lead.status) as LeadStatus;
+    const col = STATUS_TO_COLUMN[status];
+    const kpAmount = lead.commission?.kp_amount || lead.doc_summary?.kp_amount || 0;
+    const created = new Date(lead.created_at).getTime();
+    const updated = lead.status_updated_at ? new Date(lead.status_updated_at).getTime() : created;
+
+    if (now - created < DAYS_7) new7Count++;
+
+    if (col === "closed") {
+      if (now - updated < DAYS_30) {
+        closed30Amount += kpAmount;
+        closed30Count++;
+      }
+    } else if (col !== "rejected") {
+      inWorkAmount += kpAmount;
+      inWorkCount++;
+    }
+
+    if (lead.commission && lead.commission_eligible) {
+      const due = lead.commission.commission_due ?? 0;
+      const paid = lead.commission.commission_paid ?? 0;
+      commissionDue += Math.max(0, due - paid);
+    }
+  }
+
+  return { inWorkAmount, inWorkCount, closed30Amount, closed30Count, commissionDue, new7Count };
+}
+
+function summarizeDay(grouped: Record<Urgency, LeadRow[]>): string {
+  const parts: string[] = [];
+  if (grouped.urgent.length > 0) parts.push(`🔴 ${grouped.urgent.length} срочно`);
+  if (grouped.on_you.length > 0) parts.push(`🟡 ${grouped.on_you.length} на тебе`);
+  if (grouped.waiting.length > 0) parts.push(`🔵 ${grouped.waiting.length} в ожидании`);
+  if (parts.length === 0) return "Всё спокойно — нет активных сделок";
+  return parts.join(" · ");
+}
+
+function getGreeting(): string {
+  // Текущий час в часовом поясе Красноярска (UTC+7)
+  const krs = new Date(Date.now() + (new Date().getTimezoneOffset() + 7 * 60) * 60_000);
+  const h = krs.getHours();
+  if (h >= 5 && h < 12) return "Доброе утро";
+  if (h >= 12 && h < 18) return "Добрый день";
+  if (h >= 18 && h < 23) return "Добрый вечер";
+  return "Доброй ночи";
+}
+
+function formatDate(): string {
+  return new Date().toLocaleDateString("ru-RU", {
+    timeZone: "Asia/Krasnoyarsk",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
 }
