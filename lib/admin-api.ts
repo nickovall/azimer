@@ -57,7 +57,11 @@ export interface LeadDocument {
   title: string;
   file_url: string | null;
   storage_provider: "google_drive" | "supabase" | "other";
+  storage_bucket: string | null;
   storage_path: string | null;
+  file_size_bytes: number | null;
+  file_mime: string | null;
+  original_filename: string | null;
   amount: number | null;
   currency: "RUB";
   uploaded_by: string | null;
@@ -346,4 +350,67 @@ export function fmtDate(s: string | null | undefined): string {
     month: "2-digit",
     year: "numeric",
   });
+}
+
+export function fmtBytes(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  if (n < 1024) return `${n} Б`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} КБ`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} МБ`;
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} ГБ`;
+}
+
+// ─────────── Загрузка файлов в lead-documents bucket ───────────
+
+export async function uploadLeadFileDirect(args: {
+  token: string;
+  leadId: string;
+  docType: LeadDocumentType;
+  file: File;
+  title?: string;
+  amount?: number;
+}): Promise<LeadDocument> {
+  const { token, leadId, docType, file, title, amount } = args;
+
+  // 1) signed URL от admin-api
+  const step1 = await adminFetch<{ ok: true; upload_url: string; storage_path: string }>(token, {
+    action: "create_lead_upload_url",
+    lead_id: leadId,
+    doc_type: docType,
+    filename: file.name,
+  });
+
+  // 2) PUT файла прямо в Supabase Storage
+  const up = await fetch(step1.upload_url, {
+    method: "PUT",
+    body: file,
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+  });
+  if (!up.ok) throw new Error(`Upload failed: ${up.status} ${up.statusText}`);
+
+  // 3) Подтверждение метаданных
+  const step3 = await adminFetch<{ ok: true; document: LeadDocument }>(token, {
+    action: "confirm_lead_upload",
+    lead_id: leadId,
+    doc_type: docType,
+    title: title || file.name,
+    storage_path: step1.storage_path,
+    file_size_bytes: file.size,
+    file_mime: file.type || null,
+    original_filename: file.name,
+    amount,
+  });
+  return step3.document;
+}
+
+export async function deleteLeadDocument(token: string, documentId: string): Promise<void> {
+  await adminFetch(token, { action: "delete_lead_document", document_id: documentId });
+}
+
+export async function getLeadDocumentUrl(token: string, documentId: string): Promise<string> {
+  const r = await adminFetch<{ ok: true; url: string }>(token, {
+    action: "get_lead_document_signed_url",
+    document_id: documentId,
+  });
+  return r.url;
 }

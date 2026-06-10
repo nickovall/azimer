@@ -1,13 +1,17 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAdmin } from "@/components/admin/AdminShell";
 import {
   adminFetch,
+  deleteLeadDocument,
+  fmtBytes,
   fmtDateTime,
   fmtRub,
+  getLeadDocumentUrl,
+  uploadLeadFileDirect,
   CONTRACT_STATUS_LABEL,
   DOCUMENT_TYPE_LABEL,
   INVOICE_STATUS_LABEL,
@@ -26,6 +30,17 @@ import {
   type MessageTemplate,
   type LeadMessage,
 } from "@/lib/admin-api";
+import {
+  NEXT_STEP_HINT,
+  NEXT_STEP_BUTTON,
+  NEXT_STATUS,
+  STATUS_FRIENDLY,
+  URGENCY_BADGE,
+  URGENCY_BORDER,
+  URGENCY_DOT,
+  URGENCY_LABEL,
+  computeUrgency,
+} from "@/lib/admin-pipeline";
 
 const STATUSES: LeadStatus[] = [
   "new",
@@ -384,6 +399,11 @@ function AdminLeadViewPage() {
   const estState = (est?.state ?? {}) as Record<string, unknown>;
   const estLines = Array.isArray(est?.lines) ? (est?.lines as Array<Record<string, unknown>>) : null;
 
+  const currentStatus = (lead.deal_status ?? lead.status) as LeadStatus;
+  const urgency = computeUrgency({ status: currentStatus, statusUpdatedAt: lead.status_updated_at });
+  const nextStatus = NEXT_STATUS[currentStatus];
+  const nextStepLabel = NEXT_STEP_BUTTON[currentStatus];
+
   return (
     <div>
       <div className="flex items-center justify-between">
@@ -405,6 +425,30 @@ function AdminLeadViewPage() {
           )}
         </p>
       </div>
+
+      {/* CTA hero — что делать дальше */}
+      <section className={`mt-6 rounded-2xl border border-line bg-white p-5 ${URGENCY_BORDER[urgency]}`}>
+        <div className="flex flex-wrap items-start gap-4">
+          <span className={`mt-2 inline-block h-3 w-3 shrink-0 rounded-full ${URGENCY_DOT[urgency]}`} />
+          <div className="min-w-0 flex-1">
+            <p className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider ${URGENCY_BADGE[urgency]}`}>
+              {URGENCY_LABEL[urgency]} · {STATUS_FRIENDLY[currentStatus]}
+            </p>
+            <h2 className="mt-2 text-xl font-bold text-graphite-900 sm:text-2xl">
+              {NEXT_STEP_HINT[currentStatus]}
+            </h2>
+          </div>
+          {nextStatus && nextStepLabel && (
+            <button
+              onClick={() => changeStatus(nextStatus)}
+              disabled={savingStatus !== null}
+              className="rounded-full bg-orange px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-bright disabled:opacity-50"
+            >
+              {savingStatus === nextStatus ? "..." : nextStepLabel}
+            </button>
+          )}
+        </div>
+      </section>
 
       {/* Смена статуса */}
       <section className="mt-6 rounded-2xl border border-line bg-white p-5">
@@ -470,94 +514,84 @@ function AdminLeadViewPage() {
 
       <section className="mt-6 rounded-2xl border border-line bg-white p-5">
         <header className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-900/60">
-            Документы
-          </h2>
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-900/60">
+              📁 Документы сделки
+            </h2>
+            <p className="mt-0.5 text-xs text-graphite-900/45">
+              Файлы хранятся в Supabase под Lead ID. Перетащи или нажми «+ Файл» на нужную папку.
+            </p>
+          </div>
           <button
             onClick={sendToAccountant}
             disabled={savingStatus === "sent_to_accountant"}
             className="rounded-full bg-orange px-4 py-2 text-xs font-semibold text-white hover:bg-orange-bright disabled:opacity-50"
           >
-            {savingStatus === "sent_to_accountant" ? "..." : "Отправить бухгалтеру"}
+            {savingStatus === "sent_to_accountant" ? "..." : "📤 Передать бухгалтеру"}
           </button>
         </header>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-[140px_1fr_1fr_120px]">
-          <select
-            value={docDraft.doc_type}
-            onChange={(e) => setDocDraft((d) => ({ ...d, doc_type: e.target.value as LeadDocumentType }))}
-            className="rounded-xl border border-line bg-light/30 px-3 py-2 text-sm focus:border-orange focus:bg-white focus:outline-none"
-          >
-            {DOC_TYPES.map((t) => (
-              <option key={t} value={t}>{DOCUMENT_TYPE_LABEL[t]}</option>
-            ))}
-          </select>
-          <input
-            value={docDraft.title}
-            onChange={(e) => setDocDraft((d) => ({ ...d, title: e.target.value }))}
-            placeholder="Название документа"
-            className="rounded-xl border border-line bg-light/30 px-3 py-2 text-sm focus:border-orange focus:bg-white focus:outline-none"
-          />
-          <input
-            value={docDraft.file_url}
-            onChange={(e) => setDocDraft((d) => ({ ...d, file_url: e.target.value }))}
-            placeholder="Google Drive URL"
-            className="rounded-xl border border-line bg-light/30 px-3 py-2 text-sm focus:border-orange focus:bg-white focus:outline-none"
-          />
-          <input
-            value={docDraft.amount}
-            onChange={(e) => setDocDraft((d) => ({ ...d, amount: e.target.value }))}
-            placeholder="Сумма"
-            className="rounded-xl border border-line bg-light/30 px-3 py-2 text-sm focus:border-orange focus:bg-white focus:outline-none"
-          />
-          <input
-            value={docDraft.uploaded_by}
-            onChange={(e) => setDocDraft((d) => ({ ...d, uploaded_by: e.target.value }))}
-            placeholder="Кто добавил"
-            className="rounded-xl border border-line bg-light/30 px-3 py-2 text-sm focus:border-orange focus:bg-white focus:outline-none md:col-span-1"
-          />
-          <input
-            value={docDraft.notes}
-            onChange={(e) => setDocDraft((d) => ({ ...d, notes: e.target.value }))}
-            placeholder="Комментарий"
-            className="rounded-xl border border-line bg-light/30 px-3 py-2 text-sm focus:border-orange focus:bg-white focus:outline-none md:col-span-2"
-          />
-          <button
-            onClick={addDocument}
-            disabled={savingDocument || !docDraft.title.trim() || !docDraft.file_url.trim()}
-            className="rounded-full bg-graphite-950 px-4 py-2 text-xs font-semibold text-light disabled:opacity-50"
-          >
-            {savingDocument ? "..." : "Добавить"}
-          </button>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {DOC_FOLDERS.map((folder) => (
+            <DocFolder
+              key={folder.docType}
+              folder={folder}
+              documents={documents.filter((d) => d.doc_type === folder.docType)}
+              leadId={lead.id}
+              token={token}
+              onChange={load}
+            />
+          ))}
         </div>
 
-        {documents.length > 0 ? (
-          <ul className="mt-4 divide-y divide-line rounded-xl border border-line">
-            {documents.map((doc) => (
-              <li key={doc.id} className="grid gap-2 p-3 text-sm md:grid-cols-[120px_1fr_140px_120px] md:items-center">
-                <span className="text-xs font-medium uppercase tracking-wider text-graphite-900/50">
-                  {DOCUMENT_TYPE_LABEL[doc.doc_type]}
-                </span>
-                <div className="min-w-0">
-                  {doc.file_url ? (
-                    <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="truncate text-orange hover:underline">
-                      {doc.title}
-                    </a>
-                  ) : (
-                    <span>{doc.title}</span>
-                  )}
-                  {doc.notes && <div className="mt-0.5 text-xs text-graphite-900/45">{doc.notes}</div>}
-                </div>
-                <span className="font-mono text-xs text-graphite-900/60">{doc.amount != null ? fmtRub(doc.amount) : "—"}</span>
-                <span className="text-xs text-graphite-900/45">{fmtDateTime(doc.created_at)}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-4 rounded-xl bg-light p-4 text-sm text-graphite-900/45">
-            Документов пока нет. На MVP добавляем ссылки на Google Drive.
-          </p>
-        )}
+        {/* Внешние ссылки на Drive — для случая «файл уже там, не хочу заливать» */}
+        <details className="mt-4 rounded-xl border border-line bg-light/30 p-3">
+          <summary className="cursor-pointer text-xs text-graphite-900/60 hover:text-graphite-900">
+            🔗 Добавить ссылкой на Google Drive (если файл уже там)
+          </summary>
+          <div className="mt-3 grid gap-2 md:grid-cols-[140px_1fr_1fr_120px]">
+            <select
+              value={docDraft.doc_type}
+              onChange={(e) => setDocDraft((d) => ({ ...d, doc_type: e.target.value as LeadDocumentType }))}
+              className="rounded-xl border border-line bg-white px-3 py-2 text-sm focus:border-orange focus:outline-none"
+            >
+              {DOC_TYPES.map((t) => (
+                <option key={t} value={t}>{DOCUMENT_TYPE_LABEL[t]}</option>
+              ))}
+            </select>
+            <input
+              value={docDraft.title}
+              onChange={(e) => setDocDraft((d) => ({ ...d, title: e.target.value }))}
+              placeholder="Название"
+              className="rounded-xl border border-line bg-white px-3 py-2 text-sm focus:border-orange focus:outline-none"
+            />
+            <input
+              value={docDraft.file_url}
+              onChange={(e) => setDocDraft((d) => ({ ...d, file_url: e.target.value }))}
+              placeholder="https://drive.google.com/…"
+              className="rounded-xl border border-line bg-white px-3 py-2 text-sm focus:border-orange focus:outline-none"
+            />
+            <button
+              onClick={addDocument}
+              disabled={savingDocument || !docDraft.title.trim() || !docDraft.file_url.trim()}
+              className="rounded-full bg-graphite-950 px-4 py-2 text-xs font-semibold text-light disabled:opacity-50"
+            >
+              {savingDocument ? "..." : "Добавить ссылку"}
+            </button>
+            <input
+              value={docDraft.amount}
+              onChange={(e) => setDocDraft((d) => ({ ...d, amount: e.target.value }))}
+              placeholder="Сумма ₽"
+              className="rounded-xl border border-line bg-white px-3 py-2 text-sm focus:border-orange focus:outline-none md:col-span-1"
+            />
+            <input
+              value={docDraft.notes}
+              onChange={(e) => setDocDraft((d) => ({ ...d, notes: e.target.value }))}
+              placeholder="Комментарий"
+              className="rounded-xl border border-line bg-white px-3 py-2 text-sm focus:border-orange focus:outline-none md:col-span-3"
+            />
+          </div>
+        </details>
       </section>
 
       {lead.source_channel === "tender" && (
@@ -1176,4 +1210,189 @@ function orderedStateEntries(state: Record<string, unknown>): Array<[string, unk
     .filter(([k]) => !knownSet.has(k))
     .sort(([a], [b]) => a.localeCompare(b));
   return [...known, ...rest];
+}
+
+// ════════════════════════════════════════════════════════════════
+//   ПАПКИ ДОКУМЕНТОВ — Supabase Storage, как в Drive шаблоне
+// ════════════════════════════════════════════════════════════════
+
+interface DocFolderDef {
+  docType: LeadDocumentType;
+  emoji: string;
+  title: string;
+}
+
+const DOC_FOLDERS: DocFolderDef[] = [
+  { docType: "tz",       emoji: "📋", title: "01_ТЗ" },
+  { docType: "kp",       emoji: "🧮", title: "02_КП и сметы" },
+  { docType: "contract", emoji: "📜", title: "03_Договоры" },
+  { docType: "invoice",  emoji: "🧾", title: "04_Счета" },
+  { docType: "act",      emoji: "✍",  title: "05_Акты" },
+  { docType: "payment",  emoji: "💰", title: "06_Оплаты" },
+  { docType: "mail",     emoji: "✉",  title: "07_Переписка" },
+  { docType: "drawing",  emoji: "📐", title: "08_Фото и чертежи" },
+];
+
+function DocFolder({
+  folder, documents, leadId, token, onChange,
+}: {
+  folder: DocFolderDef;
+  documents: LeadDocument[];
+  leadId: string;
+  token: string;
+  onChange: () => void | Promise<void>;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  async function handleFiles(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    setUploading(true);
+    setError(null);
+    try {
+      for (const file of Array.from(fileList)) {
+        await uploadLeadFileDirect({
+          token,
+          leadId,
+          docType: folder.docType,
+          file,
+          title: file.name,
+        });
+      }
+      await onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  return (
+    <div
+      onDragEnter={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
+      className={`rounded-xl border bg-white p-3 transition-colors ${
+        dragOver ? "border-orange bg-orange/5" : "border-line"
+      }`}
+    >
+      <header className="flex items-center justify-between gap-2">
+        <h3 className="flex items-center gap-1.5 text-sm font-medium text-graphite-900">
+          <span>{folder.emoji}</span>
+          <span>{folder.title}</span>
+          {documents.length > 0 && (
+            <span className="rounded-full bg-light px-1.5 py-0.5 text-[10px] font-mono tabular-nums text-graphite-900/60">
+              {documents.length}
+            </span>
+          )}
+        </h3>
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          className="rounded-full bg-graphite-950 px-3 py-1 text-[11px] font-medium text-light transition-colors hover:bg-orange disabled:opacity-50"
+        >
+          {uploading ? "⏳" : "+ Файл"}
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          hidden
+          onChange={(e) => handleFiles(e.target.files)}
+        />
+      </header>
+
+      {documents.length === 0 ? (
+        <p className="mt-2 rounded-lg border border-dashed border-line/60 bg-light/30 py-3 text-center text-[11px] text-graphite-900/40">
+          Перетащи файл или нажми «+ Файл»
+        </p>
+      ) : (
+        <ul className="mt-2 space-y-1">
+          {documents.map((doc) => (
+            <DocItem key={doc.id} doc={doc} token={token} onChanged={onChange} />
+          ))}
+        </ul>
+      )}
+
+      {error && <p className="mt-2 text-[11px] text-red-700">{error}</p>}
+    </div>
+  );
+}
+
+function DocItem({
+  doc, token, onChanged,
+}: {
+  doc: LeadDocument;
+  token: string;
+  onChanged: () => void | Promise<void>;
+}) {
+  const [busy, setBusy] = useState<"download" | "delete" | null>(null);
+
+  async function handleDownload() {
+    setBusy("download");
+    try {
+      if (doc.storage_provider === "supabase") {
+        const url = await getLeadDocumentUrl(token, doc.id);
+        window.open(url, "_blank");
+      } else if (doc.file_url) {
+        window.open(doc.file_url, "_blank");
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm(`Удалить «${doc.title}»?`)) return;
+    setBusy("delete");
+    try {
+      await deleteLeadDocument(token, doc.id);
+      await onChanged();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e));
+      setBusy(null);
+    }
+  }
+
+  const name = doc.original_filename || doc.title;
+  const isDrive = doc.storage_provider === "google_drive";
+
+  return (
+    <li className="flex items-center gap-2 rounded-lg bg-light/40 px-2 py-1.5 text-xs">
+      <span className="text-[10px]">{isDrive ? "🔗" : "📄"}</span>
+      <span className="min-w-0 flex-1 truncate text-graphite-900" title={name}>
+        {name}
+      </span>
+      {doc.file_size_bytes != null && (
+        <span className="font-mono text-[10px] text-graphite-900/40 tabular-nums">
+          {fmtBytes(doc.file_size_bytes)}
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={handleDownload}
+        disabled={busy !== null}
+        className="text-orange hover:underline disabled:opacity-50"
+        title="Скачать"
+      >
+        ↓
+      </button>
+      <button
+        type="button"
+        onClick={handleDelete}
+        disabled={busy !== null}
+        className="text-red-600 hover:underline disabled:opacity-50"
+        title="Удалить"
+      >
+        ×
+      </button>
+    </li>
+  );
 }

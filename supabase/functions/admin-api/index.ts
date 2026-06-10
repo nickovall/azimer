@@ -206,6 +206,25 @@ function pipelinePatchForStatus(status: string): Record<string, unknown> {
   return patch;
 }
 
+// Папки в bucket'е lead-documents — мапятся из doc_type.
+const FOLDER_BY_DOC_TYPE: Record<string, string> = {
+  tz: "01_TZ",
+  kp: "02_KP_i_smety",
+  contract: "03_Dogovory",
+  invoice: "04_Scheta",
+  act: "05_Akty",
+  payment: "06_Oplaty",
+  mail: "07_Perepiska",
+  drawing: "08_Foto_i_chertezhi",
+  other: "99_Other",
+};
+
+function safeFilename(name: string): string {
+  const base = name.replace(/^.*[\\/]/, "");
+  const cleaned = base.replace(/[^\w.\-]/g, "_").slice(0, 200);
+  return cleaned || "file";
+}
+
 function documentPatchForType(docType: string): Record<string, unknown> {
   if (docType === "tz") return { deal_status: "tz_received", status: "tz_received" };
   if (docType === "kp") return { kp_status: "sent", deal_status: "kp_sent", status: "kp_sent" };
@@ -724,6 +743,121 @@ Deno.serve(async (req) => {
     }
 
     return json({ ok: true, document: data });
+  }
+
+  // ──────── Загрузка файлов в Supabase Storage ─────────
+
+  // Шаг 1: браузер просит signed upload URL под конкретный (lead_id, doc_type, filename)
+  if (action === "create_lead_upload_url") {
+    const leadId = body.lead_id as string | undefined;
+    const docType = body.doc_type as string | undefined;
+    const filename = body.filename as string | undefined;
+    if (!leadId) return json({ error: "Need lead_id" }, 400);
+    if (!docType || !ALLOWED_DOC_TYPES.has(docType)) return json({ error: "Bad doc_type" }, 400);
+    if (!filename) return json({ error: "Need filename" }, 400);
+
+    const leadR = await sb.from("leads").select("lead_code").eq("id", leadId).single();
+    if (leadR.error || !leadR.data) return json({ error: leadR.error?.message ?? "Lead not found" }, 404);
+
+    const folder = FOLDER_BY_DOC_TYPE[docType] ?? "99_Other";
+    const codeOrId = leadR.data.lead_code ?? leadId;
+    const path = `${codeOrId}/${folder}/${Date.now()}_${safeFilename(filename)}`;
+    const { data, error } = await sb.storage.from("lead-documents").createSignedUploadUrl(path);
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true, upload_url: data.signedUrl, token: data.token, storage_path: path });
+  }
+
+  // Шаг 2: после успешной заливки браузер шлёт метаданные, пишем lead_documents
+  // + автопродвижение статуса по типу документа
+  if (action === "confirm_lead_upload") {
+    const leadId = body.lead_id as string | undefined;
+    const docType = body.doc_type as string | undefined;
+    const title = nullableString(body.title);
+    const storagePath = nullableString(body.storage_path);
+    const fileSize = optionalNumber(body.file_size_bytes);
+    const fileMime = nullableString(body.file_mime);
+    const originalFilename = nullableString(body.original_filename);
+    const amount = optionalNumber(body.amount);
+    if (!leadId) return json({ error: "Need lead_id" }, 400);
+    if (!docType || !ALLOWED_DOC_TYPES.has(docType)) return json({ error: "Bad doc_type" }, 400);
+    if (!title) return json({ error: "Need title" }, 400);
+    if (!storagePath) return json({ error: "Need storage_path" }, 400);
+
+    const leadR = await sb
+      .from("leads")
+      .select("id, lead_code, source_channel, commission_eligible, commission_rate")
+      .eq("id", leadId)
+      .single();
+    if (leadR.error || !leadR.data) return json({ error: leadR.error?.message ?? "Lead not found" }, 404);
+
+    const { data: doc, error } = await sb.from("lead_documents").insert({
+      lead_id: leadId,
+      lead_code: leadR.data.lead_code,
+      doc_type: docType,
+      title,
+      storage_provider: "supabase",
+      storage_bucket: "lead-documents",
+      storage_path: storagePath,
+      file_size_bytes: fileSize,
+      file_mime: fileMime,
+      original_filename: originalFilename,
+      amount,
+      currency: "RUB",
+      uploaded_by: nullableString(body.uploaded_by) ?? "admin",
+    }).select("*").single();
+    if (error) return json({ error: error.message }, 500);
+
+    const patch = documentPatchForType(docType);
+    if (Object.keys(patch).length > 0) {
+      await sb.from("leads").update(patch).eq("id", leadId);
+    }
+
+    if (leadR.data.source_channel === "tender" && leadR.data.commission_eligible && amount != null) {
+      const commissionPatch: Record<string, unknown> = {
+        lead_id: leadId,
+        lead_code: leadR.data.lead_code,
+        commission_rate: leadR.data.commission_rate || 0.0500,
+      };
+      if (docType === "kp") commissionPatch.kp_amount = amount;
+      if (docType === "invoice") commissionPatch.invoice_amount = amount;
+      if (docType === "payment") {
+        commissionPatch.paid_amount = amount;
+        commissionPatch.payment_status = "partial";
+      }
+      if (Object.keys(commissionPatch).length > 3) {
+        await sb.from("deal_commissions").upsert(commissionPatch, { onConflict: "lead_id" });
+      }
+    }
+
+    return json({ ok: true, document: doc });
+  }
+
+  // Свежий signed download URL (живёт час)
+  if (action === "get_lead_document_signed_url") {
+    const docId = body.document_id as string | undefined;
+    if (!docId) return json({ error: "Need document_id" }, 400);
+    const docR = await sb.from("lead_documents").select("storage_bucket, storage_path").eq("id", docId).single();
+    if (docR.error || !docR.data) return json({ error: docR.error?.message ?? "Document not found" }, 404);
+    if (!docR.data.storage_bucket || !docR.data.storage_path) {
+      return json({ error: "Document is stored externally (no Supabase path)" }, 400);
+    }
+    const { data, error } = await sb.storage.from(docR.data.storage_bucket).createSignedUrl(docR.data.storage_path, 3600);
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true, url: data.signedUrl });
+  }
+
+  // Удалить документ — и файл, и запись
+  if (action === "delete_lead_document") {
+    const docId = body.document_id as string | undefined;
+    if (!docId) return json({ error: "Need document_id" }, 400);
+    const docR = await sb.from("lead_documents").select("storage_bucket, storage_path").eq("id", docId).single();
+    if (docR.error || !docR.data) return json({ error: docR.error?.message ?? "Document not found" }, 404);
+    if (docR.data.storage_bucket && docR.data.storage_path) {
+      await sb.storage.from(docR.data.storage_bucket).remove([docR.data.storage_path]);
+    }
+    const { error } = await sb.from("lead_documents").delete().eq("id", docId);
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true });
   }
 
   if (action === "update_deal_commission") {
