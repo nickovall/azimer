@@ -522,13 +522,21 @@ function AdminLeadViewPage() {
               Файлы хранятся в Supabase под Lead ID. Перетащи или нажми «+ Файл» на нужную папку.
             </p>
           </div>
-          <button
-            onClick={sendToAccountant}
-            disabled={savingStatus === "sent_to_accountant"}
-            className="rounded-full bg-orange px-4 py-2 text-xs font-semibold text-white hover:bg-orange-bright disabled:opacity-50"
-          >
-            {savingStatus === "sent_to_accountant" ? "..." : "📤 Передать бухгалтеру"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={`/console-x9p4m2/leads/kp/?id=${lead.id}`}
+              className="rounded-full bg-graphite-950 px-4 py-2 text-xs font-semibold text-light hover:bg-orange"
+            >
+              🧮 Редактор КП
+            </Link>
+            <button
+              onClick={sendToAccountant}
+              disabled={savingStatus === "sent_to_accountant"}
+              className="rounded-full bg-orange px-4 py-2 text-xs font-semibold text-white hover:bg-orange-bright disabled:opacity-50"
+            >
+              {savingStatus === "sent_to_accountant" ? "..." : "📤 Передать бухгалтеру"}
+            </button>
+          </div>
         </header>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">

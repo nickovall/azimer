@@ -634,6 +634,73 @@ Deno.serve(async (req) => {
     return json({ ok: true });
   }
 
+  // Сохранить новую версию КП — пересчёт после разговора с клиентом.
+  // Браузер передаёт { state, estimate } (state = WizardState, estimate = результат calcEstimate)
+  // — пишем lead.estimate, lead.catalog_version, добавляем запись в lead_documents (тип kp).
+  // Автопродвижение статуса: new/contacted → kp_preparing.
+  if (action === "save_lead_estimate") {
+    const id = body.id as string | undefined;
+    const estimate = body.estimate as Record<string, unknown> | undefined;
+    if (!id) return json({ error: "Need id" }, 400);
+    if (!estimate || typeof estimate !== "object") return json({ error: "Need estimate object" }, 400);
+    const base = optionalNumber((estimate as any).base) ?? 0;
+    const catalogVersion = nullableString((estimate as any).catalogVersion);
+    const versionLabel = nullableString(body.version_label) ?? "редактор админки";
+
+    const leadR = await sb
+      .from("leads")
+      .select("id, lead_code, source_channel, commission_eligible, commission_rate, status, deal_status")
+      .eq("id", id)
+      .single();
+    if (leadR.error || !leadR.data) return json({ error: leadR.error?.message ?? "Lead not found" }, 404);
+
+    // 1) обновить сам lead
+    const leadPatch: Record<string, unknown> = { estimate };
+    if (catalogVersion) leadPatch.catalog_version = catalogVersion;
+    const curStatus = leadR.data.deal_status ?? leadR.data.status;
+    if (curStatus === "new" || curStatus === "contacted") {
+      leadPatch.deal_status = "kp_preparing";
+      leadPatch.status = "kp_preparing";
+      leadPatch.kp_status = "preparing";
+    }
+    const upd = await sb.from("leads").update(leadPatch).eq("id", id);
+    if (upd.error) return json({ error: upd.error.message }, 500);
+
+    // 2) посчитать какая это версия (N-я)
+    const cntR = await sb
+      .from("lead_documents")
+      .select("id", { count: "exact", head: true })
+      .eq("lead_id", id)
+      .eq("doc_type", "kp");
+    const version = (cntR.count ?? 0) + 1;
+
+    // 3) добавить запись в lead_documents
+    const { data: doc, error: docErr } = await sb.from("lead_documents").insert({
+      lead_id: id,
+      lead_code: leadR.data.lead_code,
+      doc_type: "kp",
+      title: `КП v${version} — ${versionLabel}`,
+      storage_provider: "other",  // живёт в lead.estimate, не как файл
+      amount: base > 0 ? base : null,
+      currency: "RUB",
+      uploaded_by: "admin",
+      notes: catalogVersion ? `catalog ${catalogVersion}` : null,
+    }).select("*").single();
+    if (docErr) return json({ error: docErr.message }, 500);
+
+    // 4) для тендерных лидов с комиссией — обновить kp_amount
+    if (leadR.data.source_channel === "tender" && leadR.data.commission_eligible && base > 0) {
+      await sb.from("deal_commissions").upsert({
+        lead_id: id,
+        lead_code: leadR.data.lead_code,
+        commission_rate: leadR.data.commission_rate || 0.0500,
+        kp_amount: base,
+      }, { onConflict: "lead_id" });
+    }
+
+    return json({ ok: true, version, document: doc });
+  }
+
   // ════════════════════════════════════════════════════════════════
   if (action === "update_lead_deal_fields") {
     const { id } = body;
