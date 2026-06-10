@@ -1,5 +1,8 @@
 import type { MetadataRoute } from "next";
 
+// Требование Next 16 + output: 'export': route-хендлер должен быть статичен.
+export const dynamic = "force-static";
+
 // PWA-манифест ТОЛЬКО для админки — публичный сайт остаётся обычным сайтом.
 // scope=/console-x9p4m2/ означает что иконка на хом-экране → открывается на дашборде,
 // а клики по обычным azimer.ru ссылкам уходят в браузер.
