@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import SmoothScroll from "@/components/SmoothScroll";
@@ -86,6 +86,20 @@ export const metadata: Metadata = {
     yandex: "093cee092a2542ad",
   },
   formatDetection: { telephone: true, address: false, email: true },
+  // PWA — устанавливается на телефон как приложение
+  // start_url, scope, icons определены в app/manifest.ts (только для /console-x9p4m2/)
+  appleWebApp: {
+    capable: true,
+    title: "АЗИМЕР",
+    statusBarStyle: "default",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#f97316",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

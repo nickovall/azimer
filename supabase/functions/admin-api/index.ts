@@ -17,9 +17,13 @@ const SITE_URL        = Deno.env.get("SITE_URL") ?? "https://azimer.ru";
 // = компрометация подписи всех живых сессий, и rotate пароля молча
 // инвалидирует токены вместо явного rotate секрета.
 const ADMIN_SESSION_SECRET = Deno.env.get("ADMIN_SESSION_SECRET") ?? "";
+// По умолчанию 30 дней — админка должна быть «под рукой», как PWA на телефоне.
+// Реальная защита — gate-key + пароль + rotate ADMIN_SESSION_SECRET (инвалидирует
+// все живые токены). Token leak не страшнее чем leak пароля.
+// Cap 90 дней — чтобы аномально длинный TTL в env не означал бессмертный токен.
 const ADMIN_TOKEN_TTL_SECONDS = Math.max(60, Math.min(
-  Number(Deno.env.get("ADMIN_TOKEN_TTL_SECONDS") ?? 30 * 60),
-  8 * 60 * 60,
+  Number(Deno.env.get("ADMIN_TOKEN_TTL_SECONDS") ?? 30 * 24 * 60 * 60),
+  90 * 24 * 60 * 60,
 ));
 
 const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });

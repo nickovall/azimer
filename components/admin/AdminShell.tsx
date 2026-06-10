@@ -34,7 +34,8 @@ const NAV = [
 ];
 
 export default function AdminShell({ children }: { children: ReactNode }) {
-  // Gate: ключ из URL или sessionStorage. Без него — рендерим 404.
+  // Gate: ключ из URL или localStorage (trust-device, переживает закрытие вкладки).
+  // Без него — рендерим 404.
   const [gated, setGated] = useState(false);
   const [gateChecked, setGateChecked] = useState(false);
 
@@ -44,13 +45,13 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Шаг 1: проверка gate-ключа (URL ?k= или sessionStorage)
+  // Шаг 1: проверка gate-ключа (URL ?k= или localStorage trust-device)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const urlKey = new URLSearchParams(window.location.search).get("k");
-    const stored = sessionStorage.getItem(GATE_STORAGE);
+    const stored = localStorage.getItem(GATE_STORAGE);
     if (GATE_KEY && urlKey === GATE_KEY) {
-      sessionStorage.setItem(GATE_STORAGE, "1");
+      localStorage.setItem(GATE_STORAGE, "1");
       // Уберём ?k= из URL чтобы не мелькал в скриншотах/истории
       const url = new URL(window.location.href);
       url.searchParams.delete("k");
@@ -62,17 +63,18 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     setGateChecked(true);
   }, []);
 
-  // Шаг 2 (только если gated): восстановить короткоживущий session token и проверить его на сервере.
+  // Шаг 2 (только если gated): восстановить долгоживущий session token (30 дней)
+  // и проверить его на сервере. Если истёк или signing secret ротировали — попросим пароль.
   useEffect(() => {
     if (!gated) { setChecking(false); return; }
-    const savedToken = typeof window !== "undefined" ? sessionStorage.getItem("admin_token") : null;
-    const savedExp = typeof window !== "undefined" ? Number(sessionStorage.getItem("admin_token_exp") ?? 0) : 0;
+    const savedToken = typeof window !== "undefined" ? localStorage.getItem("admin_token") : null;
+    const savedExp = typeof window !== "undefined" ? Number(localStorage.getItem("admin_token_exp") ?? 0) : 0;
     const now = Math.floor(Date.now() / 1000);
     if (savedToken && savedExp > now + 10) {
       verifySession(savedToken).finally(() => setChecking(false));
     } else {
-      sessionStorage.removeItem("admin_token");
-      sessionStorage.removeItem("admin_token_exp");
+      localStorage.removeItem("admin_token");
+      localStorage.removeItem("admin_token_exp");
       setChecking(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -82,16 +84,16 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     setError(null);
     try {
       const r = await adminFetch<{ ok: true; expires_at: number }>(savedToken, { action: "verify_session" });
-      sessionStorage.setItem("admin_token", savedToken);
-      sessionStorage.setItem("admin_token_exp", String(r.expires_at));
+      localStorage.setItem("admin_token", savedToken);
+      localStorage.setItem("admin_token_exp", String(r.expires_at));
       setToken(savedToken);
       setAuthed(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg.includes("Unauthorized") || msg.includes("401") ? "Сессия истекла" : "Ошибка: " + msg);
       setAuthed(false);
-      sessionStorage.removeItem("admin_token");
-      sessionStorage.removeItem("admin_token_exp");
+      localStorage.removeItem("admin_token");
+      localStorage.removeItem("admin_token_exp");
     }
   }
 
@@ -99,8 +101,8 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     setError(null);
     try {
       const session = await adminLogin(pw);
-      sessionStorage.setItem("admin_token", session.token);
-      sessionStorage.setItem("admin_token_exp", String(session.expires_at));
+      localStorage.setItem("admin_token", session.token);
+      localStorage.setItem("admin_token_exp", String(session.expires_at));
       setToken(session.token);
       setInput("");
       setAuthed(true);
@@ -112,14 +114,14 @@ export default function AdminShell({ children }: { children: ReactNode }) {
         setError("Ошибка: " + msg);
       }
       setAuthed(false);
-      sessionStorage.removeItem("admin_token");
-      sessionStorage.removeItem("admin_token_exp");
+      localStorage.removeItem("admin_token");
+      localStorage.removeItem("admin_token_exp");
     }
   }
 
   function logout() {
-    sessionStorage.removeItem("admin_token");
-    sessionStorage.removeItem("admin_token_exp");
+    localStorage.removeItem("admin_token");
+    localStorage.removeItem("admin_token_exp");
     setToken("");
     setInput("");
     setAuthed(false);
