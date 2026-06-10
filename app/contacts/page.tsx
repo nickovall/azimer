@@ -56,11 +56,6 @@ export default function ContactsPage() {
                       <p className="mt-2 text-lg font-bold text-graphite-900 group-hover:text-orange">
                         {company.phoneLabel}
                       </p>
-                      {company.contactPerson ? (
-                        <p className="mt-1 text-xs text-graphite-900/55">
-                          {company.contactPerson}, менеджер
-                        </p>
-                      ) : null}
                     </a>
                   ) : null}
 
@@ -77,11 +72,6 @@ export default function ContactsPage() {
                       <p className="mt-2 text-lg font-bold text-graphite-900 group-hover:text-orange">
                         VK-чат
                       </p>
-                      {company.vkHandle ? (
-                        <p className="mt-1 text-xs text-graphite-900/55">
-                          {company.vkHandle}
-                        </p>
-                      ) : null}
                     </a>
                   ) : null}
 

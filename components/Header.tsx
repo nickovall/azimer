@@ -6,6 +6,7 @@ import { useLenis } from "lenis/react";
 import { motion } from "framer-motion";
 import Container from "./ui/Container";
 import Logo from "./ui/Logo";
+import ContactMenu from "./ContactMenu";
 import { company, nav } from "@/lib/content";
 
 export default function Header() {
@@ -55,14 +56,26 @@ export default function Header() {
           </nav>
 
           <div className="flex items-center gap-3">
-            {company.phoneHref && company.phoneLabel ? (
-              <a
-                href={company.phoneHref}
-                className="hidden text-sm font-semibold text-graphite-900 transition-colors hover:text-orange xl:inline-flex"
-                aria-label={`Позвонить ${company.phoneLabel}`}
-              >
-                {company.phoneLabel}
-              </a>
+            {company.phoneHref || company.vkChatHref ? (
+              <div className="hidden xl:inline-flex">
+                <ContactMenu
+                  variant="header"
+                  trigger={
+                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-graphite-900 transition-colors hover:text-orange">
+                      Связаться
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                        <path
+                          d="m6 9 6 6 6-6"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </span>
+                  }
+                />
+              </div>
             ) : null}
 
             <Link
@@ -120,28 +133,28 @@ export default function Header() {
               </Link>
             ))}
 
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {company.phoneHref && company.phoneLabel ? (
-                <a
-                  href={company.phoneHref}
-                  onClick={() => setMenuOpen(false)}
-                  className="flex items-center justify-center gap-2 rounded-full border border-graphite-900/15 px-5 py-3 text-sm font-semibold text-graphite-900"
-                >
-                  Позвонить
-                </a>
-              ) : null}
-              {company.vkChatHref ? (
-                <a
-                  href={company.vkChatHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => setMenuOpen(false)}
-                  className="flex items-center justify-center gap-2 rounded-full border border-graphite-900/15 px-5 py-3 text-sm font-semibold text-graphite-900"
-                >
-                  Написать в VK
-                </a>
-              ) : null}
-            </div>
+            {company.phoneHref || company.vkChatHref ? (
+              <div className="mt-3">
+                <ContactMenu
+                  variant="burger"
+                  trigger={
+                    <span className="flex items-center justify-center gap-2 rounded-full border border-graphite-900/15 px-5 py-3 text-sm font-semibold text-graphite-900">
+                      Связаться
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                        <path
+                          d="m6 9 6 6 6-6"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </span>
+                  }
+                  onAction={() => setMenuOpen(false)}
+                />
+              </div>
+            ) : null}
 
             <Link
               href="/estimate"
