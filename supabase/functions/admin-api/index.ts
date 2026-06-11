@@ -1386,6 +1386,7 @@ const SMSC_PSW      = Deno.env.get("SMSC_PSW")      ?? "";
 const SMSC_SENDER   = Deno.env.get("SMSC_SENDER")   ?? "SMSC.RU";
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const EMAIL_FROM = Deno.env.get("EMAIL_FROM") ?? "АЗИМЕР <onboarding@resend.dev>";
+const EMAIL_REPLY_TO = Deno.env.get("EMAIL_REPLY_TO") ?? "";
 
 const REGION_LABELS_MSG: Record<string, string> = {
   krsk_city: "Красноярск + пригороды",
@@ -1558,6 +1559,7 @@ async function sendEmail(to: string, subject: string, body: string): Promise<{ o
         to: [to],
         subject,
         text: body,
+        ...(EMAIL_REPLY_TO ? { reply_to: [EMAIL_REPLY_TO] } : {}),
       }),
     });
     const data = await r.json().catch(() => null);
