@@ -1543,6 +1543,58 @@ async function sendSms(phone: string, text: string): Promise<{ ok: boolean; resp
   }
 }
 
+// Брендированный HTML-шаблон для писем. Совместим с Gmail/Outlook/Yandex/Mail.ru/Apple Mail —
+// инлайн-стили (внешние CSS блокируются почтовиками), table-вёрстка (Outlook не понимает flex),
+// без custom-fonts (могут не загрузиться, fallback на системные).
+function buildEmailHtml(textBody: string): string {
+  // Текст конвертируем в HTML: переносы строк → <br>, экранируем спец-символы
+  const escaped = textBody
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/\n/g, "<br>");
+
+  return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>АЗИМЕР</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f6f5f3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f6f5f3;">
+  <tr>
+    <td align="center" style="padding:24px 16px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+        <!-- Header -->
+        <tr>
+          <td style="padding:24px 32px 16px 32px;border-bottom:3px solid #f97316;">
+            <img src="https://azimer.ru/logo-pdf.png" alt="АЗИМЕР" width="140" style="display:block;border:0;outline:none;text-decoration:none;height:auto;max-width:140px;">
+          </td>
+        </tr>
+        <!-- Body -->
+        <tr>
+          <td style="padding:28px 32px 24px 32px;font-size:15px;line-height:1.6;color:#1a1a1a;">
+            ${escaped}
+          </td>
+        </tr>
+        <!-- Footer -->
+        <tr>
+          <td style="padding:20px 32px 28px 32px;border-top:1px solid #e6e3df;font-size:12px;line-height:1.5;color:#666;">
+            <strong style="color:#1a1a1a;">ООО «АЗИМЕР»</strong> · Каркасные здания под ключ<br>
+            Красноярск · <a href="tel:+79016000565" style="color:#f97316;text-decoration:none;">+7 901 600-05-65</a> · <a href="https://azimer.ru" style="color:#f97316;text-decoration:none;">azimer.ru</a><br>
+            <span style="color:#999;font-size:11px;">Ответ на это письмо придёт нам в обработку — пишите смело.</span>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
 async function sendEmail(to: string, subject: string, body: string): Promise<{ ok: boolean; response: any; error: string | null }> {
   if (!RESEND_API_KEY) {
     return { ok: false, response: null, error: "RESEND_API_KEY not configured. Sign up at resend.com, verify azimer.ru domain, set Supabase secret." };
@@ -1559,6 +1611,7 @@ async function sendEmail(to: string, subject: string, body: string): Promise<{ o
         to: [to],
         subject,
         text: body,
+        html: buildEmailHtml(body),
         ...(EMAIL_REPLY_TO ? { reply_to: [EMAIL_REPLY_TO] } : {}),
       }),
     });
