@@ -1222,6 +1222,31 @@ Deno.serve(async (req) => {
   //   SEND SMS / EMAIL + история отправок
   // ════════════════════════════════════════════════════════════════
 
+  // Standalone отправка email/SMS на произвольный адрес — без привязки к лиду.
+  // Полезно для cold-outreach, ответов на info@, любых корп-писем.
+  if (action === "send_freeform_email") {
+    const to = nullableString(body.to);
+    const subject = nullableString(body.subject);
+    const text = nullableString(body.body);
+    if (!to) return json({ error: "Need to (email)" }, 400);
+    if (!/.@./.test(to)) return json({ error: "to must be an email" }, 400);
+    if (!subject) return json({ error: "Need subject" }, 400);
+    if (!text) return json({ error: "Need body" }, 400);
+    const r = await sendEmail(to, subject, text);
+    if (!r.ok) return json({ error: r.error ?? "send failed", response: r.response }, 500);
+    return json({ ok: true, response: r.response });
+  }
+
+  if (action === "send_freeform_sms") {
+    const to = nullableString(body.to);
+    const text = nullableString(body.body);
+    if (!to) return json({ error: "Need to (phone)" }, 400);
+    if (!text) return json({ error: "Need body" }, 400);
+    const r = await sendSms(to, text);
+    if (!r.ok) return json({ error: r.error ?? "send failed", response: r.response }, 500);
+    return json({ ok: true, response: r.response });
+  }
+
   if (action === "send_sms" || action === "send_email") {
     const channel: "sms" | "email" = action === "send_sms" ? "sms" : "email";
     const { lead_id, template_id, template_slug, custom_body, custom_subject } = body;
