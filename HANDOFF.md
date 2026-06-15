@@ -134,6 +134,53 @@ app/console-x9p4m2/leads/*
 - Deal status: manager-facing sales pipeline status.
 - Document status: KP/contract/invoice/payment readiness for the lead card.
 
+## Catalog Supplier Prices Update 2026-06-15
+
+### TL;DR
+
+Dealer prices loaded from partner pricing for sandwich panels, profiled sheet,
+trim, hardware, and DorHan sectional gates. Client markup +20% remains
+auto-applied by engine via `FINANCE.client_markup_pct`. Historical leads
+protected by `catalog_version` snapshot — KPs created before 2026-06-15 keep
+their original calculations.
+
+### Sources
+
+- Sandwich / proflist / trim / hardware: partner pricing on sandwich panels
+- Sectional gates DorHan: OOO «Stroy-life» (Yuri Torgashin, Khakassia / Tuva /
+  Krasnoyarsk), dealer price with axial automation
+
+### Changes
+
+- 45 price updates + 3 new positions (`wall_pir_80`, `roof_minvata_80`,
+  `roof_pir_80`).
+- Apply script: `B:/dbtest/apply-supplier-prices-2026-06-15.mjs`
+- Source tag in `catalog_items`: `supplier-prices-2026-06-15`
+- New `CATALOG_VERSION` after rebuild: `db-snapshot-2026-06-15-...`
+
+### Key Shifts
+
+- Gates: ×2-3 (placeholder was severely underpriced)
+- PIR panels: +25..+44% (premium insulation was undervalued)
+- Mineral wool: -2..-7%
+- Profiled sheet H60: +16..+38%
+- Seal tape: -96% (fixed placeholder bug: 360 → 15 RUB/m)
+
+### Verification
+
+- 115/117 accuracy assertions pass (same 2 baseline `tent_arched` fails as
+  before the change — gate-price-hardcoded asserts in
+  `B:/dbtest/engine-accuracy-tests.mts` were switched to name-based matching).
+- `typecheck` clean, `next build` clean (24 static pages).
+
+### Open Items
+
+- Wave 2 of supplier pricing: doors, windows, metal, contractor works, facade —
+  see project-root HANDOFF for the supplier follow-up list.
+- Bot wizard upgrade («gate with/without automation», expanded proflist
+  selection) deferred until full supplier set arrives — to be done as one
+  commit so the wizard schema only migrates once.
+
 ## Current State As Of 2026-06-05
 
 - Public site is a Next.js static export deployed through GitLab Pages.
