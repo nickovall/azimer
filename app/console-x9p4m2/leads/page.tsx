@@ -371,7 +371,7 @@ function LeadCard({
 
         {/* Кто / что / сколько */}
         <div className="mt-3 space-y-0.5">
-          <p className="text-sm font-semibold text-graphite-900">{customer}</p>
+          <p className="break-words text-sm font-semibold text-graphite-900">{customer}</p>
           {object && !compact && (
             <p className="line-clamp-1 text-xs text-graphite-900/60">{object}</p>
           )}
