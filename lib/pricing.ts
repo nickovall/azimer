@@ -150,12 +150,12 @@ const mapFoundation = (s: string): BuildingInput["foundation"] => {
   return "none";
 };
 
-export function calcEstimate(s: WizardState): Estimate {
-  const area = Math.max(0, s.length * s.width);
-  const wallArea = Math.max(0, 2 * (s.length + s.width) * s.height);
-
-  // Маппинг wizard state → BuildingInput для нового движка
-  const input: BuildingInput = {
+// Маппинг wizard state → BuildingInput для движка калькулятора.
+// Экспортируется, чтобы /kp получал именно BuildingInput (тот же формат,
+// что серверный buildKpUrlForLead), а не сырой WizardState — иначе /kp
+// не может пересчитать и показывает «Не удалось загрузить данные КП».
+export function stateToInput(s: WizardState): BuildingInput {
+  return {
     objectType: (s.objectType || "sklad") as BuildingInput["objectType"],
     region:     s.region || undefined,   // → engine.ts → getRegion(id) → снег/ветер/сейсмика/мерзлота
     length:     s.length,
@@ -172,6 +172,14 @@ export function calcEstimate(s: WizardState): Estimate {
     doors:      { count: s.options.door ?? 0 },
     logisticsAdd: false,
   };
+}
+
+export function calcEstimate(s: WizardState): Estimate {
+  const area = Math.max(0, s.length * s.width);
+  const wallArea = Math.max(0, 2 * (s.length + s.width) * s.height);
+
+  // Маппинг wizard state → BuildingInput для нового движка
+  const input = stateToInput(s);
 
   // Если калькулятор не готов посчитать (нулевые размеры) — возвращаем пустое
   if (area <= 0 || s.height <= 0 || !s.frame) {

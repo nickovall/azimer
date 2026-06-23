@@ -7,6 +7,7 @@ import { useAdmin } from "@/components/admin/AdminShell";
 import { adminFetch, fmtRub, type LeadFull } from "@/lib/admin-api";
 import {
   calcEstimate,
+  stateToInput,
   initialState,
   regionTypes,
   objectTypes,
@@ -127,16 +128,16 @@ function AdminKpEditorPage() {
 
   function buildKpUrl(): string {
     if (!estimate || !lead) return "";
+    // Формат payload ОБЯЗАН совпадать с серверным buildKpUrlForLead:
+    // /kp ждёт { input: BuildingInput } и сам пересчитывает по текущему каталогу.
+    // Раньше клали { state, ... } — /kp не мог распарсить и падал в «Ошибка».
     const payload = {
-      state,
-      base: estimate.base,
-      low: estimate.low,
-      high: estimate.high,
-      area: estimate.area,
-      lines: estimate.lines,
-      complexity: estimate.complexity,
-      regionLabel: estimate.regionLabel,
-      lead: { name: lead.name, phone: lead.phone, company: lead.company },
+      input: stateToInput(state),
+      client: { name: lead.company || lead.name, phone: lead.phone },
+      leadId: lead.id,
+      catalogVersion: estimate.catalogVersion ?? lead.catalog_version ?? null,
+      issuedAt: lead.created_at,
+      mode: "current-recalc",
     };
     const json = JSON.stringify(payload);
     const b64 = typeof window !== "undefined"
