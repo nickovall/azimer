@@ -86,6 +86,14 @@ export default function KpPage() {
         <div className="mb-10 border-b-2 border-orange pb-6 print:mb-6">
           <div className="flex items-end justify-between">
             <div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/logo-pdf.png"
+                alt="АЗИМЕР"
+                width={84}
+                height={56}
+                className="mb-3 h-14 w-auto print:[print-color-adjust:exact]"
+              />
               <p className="font-mono text-xs uppercase tracking-[0.22em] text-orange">Коммерческое предложение</p>
               <h1 className="mt-2 text-4xl font-extrabold tracking-tight text-graphite-900 md:text-5xl">
                 ООО «АЗИМЕР»
