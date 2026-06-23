@@ -403,6 +403,29 @@ export async function uploadLeadFileDirect(args: {
   return step3.document;
 }
 
+// ─────────── Ручное создание лида из админки ───────────
+
+export interface NewLeadInput {
+  name: string;
+  phone: string;
+  email?: string;
+  company?: string;
+  client_type?: string;
+  object_type?: string;
+  direction?: string;
+  message?: string;
+}
+
+// Создаёт лид с source_channel='manual'. Возвращает id + сгенерированный lead_code (MAN-…).
+// Триггер v6 для manual-лидов «тихий»: ни SMS клиенту, ни Telegram Азамату.
+export async function createLead(token: string, input: NewLeadInput): Promise<{ id: string; lead_code: string | null }> {
+  const r = await adminFetch<{ ok: true; id: string; lead_code: string | null }>(token, {
+    action: "create_lead",
+    ...input,
+  });
+  return { id: r.id, lead_code: r.lead_code };
+}
+
 export async function deleteLeadDocument(token: string, documentId: string): Promise<void> {
   await adminFetch(token, { action: "delete_lead_document", document_id: documentId });
 }

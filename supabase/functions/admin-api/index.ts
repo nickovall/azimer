@@ -567,6 +567,40 @@ Deno.serve(async (req) => {
     });
   }
 
+  // Создать лид вручную из админки (звонок, выставка, оффлайн-контакт).
+  // source_channel='manual' → lead_code MAN-… + триггер v6 НЕ шлёт SMS/Telegram.
+  // Сам КП и его версии собираются потом в редакторе (/leads/kp).
+  if (action === "create_lead") {
+    const name = nullableString(body.name);
+    const phone = nullableString(body.phone);
+    if (!name) return json({ error: "Нужно имя" }, 400);
+    if (!phone) return json({ error: "Нужен телефон" }, 400);
+
+    const insert: Record<string, unknown> = {
+      source: "contact",          // legacy granular source — в check-констрейнте нет 'manual'
+      source_channel: "manual",   // реальная атрибуция → MAN-… lead_code + «тихий» триггер v6
+      status: "new",
+      deal_status: "new",
+      name,
+      phone,
+      email:       nullableString(body.email),
+      company:     nullableString(body.company),
+      client_type: nullableString(body.client_type),
+      object_type: nullableString(body.object_type),
+      direction:   nullableString(body.direction),
+      message:     nullableString(body.message),
+      created_by_system: "admin-manual",
+    };
+
+    const { data, error } = await sb
+      .from("leads")
+      .insert(insert)
+      .select("id, lead_code")
+      .single();
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true, id: data.id, lead_code: data.lead_code });
+  }
+
   if (action === "get_lead_legacy") {
     const { id } = body;
     if (!id) return json({ error: "Need id" }, 400);

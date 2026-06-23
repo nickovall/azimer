@@ -133,12 +133,20 @@ export default function AdminLeadsListPage() {
 
   return (
     <div>
-      <header className="border-b border-line pb-5">
-        <p className="font-mono text-xs uppercase tracking-[0.2em] text-orange">Воронка</p>
-        <h1 className="mt-1 text-3xl font-bold text-graphite-900">Заявки и сделки</h1>
-        <p className="mt-1 text-sm text-graphite-900/60">
-          {loading ? "Загружаем…" : total === 0 ? "Заявок не найдено" : `${total} заявок в воронке`}
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-line pb-5">
+        <div>
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-orange">Воронка</p>
+          <h1 className="mt-1 text-3xl font-bold text-graphite-900">Заявки и сделки</h1>
+          <p className="mt-1 text-sm text-graphite-900/60">
+            {loading ? "Загружаем…" : total === 0 ? "Заявок не найдено" : `${total} заявок в воронке`}
+          </p>
+        </div>
+        <Link
+          href="/console-x9p4m2/leads/new/"
+          className="shrink-0 rounded-full bg-orange px-5 py-2.5 text-sm font-semibold text-white hover:bg-orange-bright"
+        >
+          ➕ Добавить заявку
+        </Link>
       </header>
 
       {/* Переключатель вида + поиск */}
