@@ -362,7 +362,7 @@ export const projects: ProjectCase[] = [
     text: "Сборка несущего каркаса с применением спецтехники.",
   },
   {
-    img: "/photos/proc-welding.jpg",
+    img: "/photos/proc-welder.jpg",
     imgPos: "center",
     tag: "Конструкции",
     title: "Технические сооружения",
