@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAdmin } from "@/components/admin/AdminShell";
 import {
   adminFetch,
+  deleteLead,
   fmtDateTime,
   fmtRub,
   CONTRACT_STATUS_LABEL,
@@ -131,6 +132,21 @@ export default function AdminLeadsListPage() {
     }
   }
 
+  async function removeLead(lead: LeadRow) {
+    const who = lead.company || lead.name || lead.lead_code || lead.id.slice(0, 8);
+    if (!window.confirm(`Удалить заявку «${who}» безвозвратно?\n\nДля мусора/спама. Отменить нельзя.`)) return;
+    // Оптимистично убрать из списка
+    const prev = leads;
+    setLeads((p) => p.filter((l) => l.id !== lead.id));
+    setTotal((t) => Math.max(0, t - 1));
+    try {
+      await deleteLead(token, lead.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setLeads(prev); // откатить
+    }
+  }
+
   return (
     <div>
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-line pb-5">
@@ -187,6 +203,7 @@ export default function AdminLeadsListPage() {
           activeColumn={activeColumn}
           onColumnChange={setActiveColumn}
           onAdvance={advance}
+          onDelete={removeLead}
         />
       ) : (
         <TableView
@@ -216,13 +233,14 @@ export default function AdminLeadsListPage() {
 // ═══════════════════════════════════════════════════════════════
 
 function BoardView({
-  leads, loading, activeColumn, onColumnChange, onAdvance,
+  leads, loading, activeColumn, onColumnChange, onAdvance, onDelete,
 }: {
   leads: LeadRow[];
   loading: boolean;
   activeColumn: PipelineColumn;
   onColumnChange: (c: PipelineColumn) => void;
   onAdvance: (l: LeadRow) => void;
+  onDelete?: (l: LeadRow) => void;
 }) {
   // Разложить лиды по колонкам
   const byColumn = useMemo(() => {
@@ -268,6 +286,7 @@ function BoardView({
           leads={byColumn.get(activeColumn) ?? []}
           loading={loading}
           onAdvance={onAdvance}
+          onDelete={onDelete}
         />
       </div>
 
@@ -280,6 +299,7 @@ function BoardView({
             leads={byColumn.get(col.key) ?? []}
             loading={loading}
             onAdvance={onAdvance}
+            onDelete={onDelete}
             compact
           />
         ))}
@@ -294,7 +314,7 @@ function BoardView({
           <div className="border-t border-line p-4">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {(byColumn.get("rejected") ?? []).map((lead) => (
-                <LeadCard key={lead.id} lead={lead} onAdvance={onAdvance} compact />
+                <LeadCard key={lead.id} lead={lead} onAdvance={onAdvance} onDelete={onDelete} compact />
               ))}
             </div>
           </div>
@@ -305,12 +325,13 @@ function BoardView({
 }
 
 function BoardColumn({
-  column, leads, loading, onAdvance, compact,
+  column, leads, loading, onAdvance, onDelete, compact,
 }: {
   column: typeof PIPELINE_COLUMNS[number];
   leads: LeadRow[];
   loading: boolean;
   onAdvance: (l: LeadRow) => void;
+  onDelete?: (l: LeadRow) => void;
   compact?: boolean;
 }) {
   return (
@@ -337,7 +358,7 @@ function BoardColumn({
       ) : (
         <div className="space-y-2">
           {leads.map((lead) => (
-            <LeadCard key={lead.id} lead={lead} onAdvance={onAdvance} compact={compact} />
+            <LeadCard key={lead.id} lead={lead} onAdvance={onAdvance} onDelete={onDelete} compact={compact} />
           ))}
         </div>
       )}
@@ -346,10 +367,11 @@ function BoardColumn({
 }
 
 function LeadCard({
-  lead, onAdvance, compact,
+  lead, onAdvance, onDelete, compact,
 }: {
   lead: LeadRow;
   onAdvance: (l: LeadRow) => void;
+  onDelete?: (l: LeadRow) => void;
   compact?: boolean;
 }) {
   const status = (lead.deal_status ?? lead.status) as LeadStatus;
@@ -367,7 +389,16 @@ function LeadCard({
     : 0;
 
   return (
-    <article className={`group rounded-xl bg-white p-3 shadow-sm transition-all hover:shadow-md ${URGENCY_BORDER[urgency]}`}>
+    <article className={`group relative rounded-xl bg-white p-3 shadow-sm transition-all hover:shadow-md ${URGENCY_BORDER[urgency]}`}>
+      {onDelete && (
+        <button
+          onClick={(e) => { e.stopPropagation(); e.preventDefault(); onDelete(lead); }}
+          title="Удалить заявку (для мусора/спама)"
+          className="absolute right-1 top-1 z-10 hidden rounded-md px-1.5 py-0.5 text-xs text-graphite-900/30 transition-colors hover:bg-red-50 hover:text-red-600 group-hover:block"
+        >
+          ✕
+        </button>
+      )}
       <Link href={`/console-x9p4m2/leads/view/?id=${lead.id}`} className="block">
         {/* Главное — что делать дальше */}
         <div className="flex items-start gap-2">

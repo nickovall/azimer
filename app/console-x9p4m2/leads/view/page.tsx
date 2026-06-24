@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useAdmin } from "@/components/admin/AdminShell";
 import {
   adminFetch,
+  deleteLead,
   deleteLeadDocument,
   fmtBytes,
   fmtDateTime,
@@ -83,6 +84,7 @@ function AdminLeadViewPage() {
   const [notesDraft, setNotesDraft] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [savingStatus, setSavingStatus] = useState<LeadStatus | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [folderDraft, setFolderDraft] = useState("");
   const [savingFolder, setSavingFolder] = useState(false);
   const [docDraft, setDocDraft] = useState({
@@ -186,6 +188,22 @@ function AdminLeadViewPage() {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSavingStatus(null);
+    }
+  }
+
+  async function handleDelete() {
+    if (!lead) return;
+    const ok = window.confirm(
+      `Удалить заявку «${lead.name}» безвозвратно?\n\nВместе с ней удалятся связанные документы, сообщения и комиссия. Отменить нельзя.`,
+    );
+    if (!ok) return;
+    setDeleting(true);
+    try {
+      await deleteLead(token, lead.id);
+      window.location.href = "/console-x9p4m2/leads/";
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setDeleting(false);
     }
   }
 
@@ -1078,6 +1096,25 @@ function AdminLeadViewPage() {
           </ul>
         </section>
       )}
+
+      {/* Опасная зона — удаление мусорного/спам-лида */}
+      <section className="mt-6 rounded-2xl border border-red-200 bg-red-50/40 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-red-800">Удалить заявку</h2>
+            <p className="mt-0.5 text-xs text-red-700/70">
+              Безвозвратно — для мусора и спама. Удалятся также документы, сообщения и комиссия этого лида.
+            </p>
+          </div>
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="shrink-0 rounded-full border border-red-300 bg-white px-5 py-2.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-600 hover:text-white disabled:opacity-50"
+          >
+            {deleting ? "Удаляем…" : "🗑 Удалить безвозвратно"}
+          </button>
+        </div>
+      </section>
 
       {closeModalOpen && (
         <CloseDealModal

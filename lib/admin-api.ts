@@ -430,6 +430,12 @@ export async function deleteLeadDocument(token: string, documentId: string): Pro
   await adminFetch(token, { action: "delete_lead_document", document_id: documentId });
 }
 
+// Удалить лид безвозвратно (для мусора/спама). Каскадом удалятся документы,
+// сообщения и комиссия. Используется в карточке и в списке заявок.
+export async function deleteLead(token: string, id: string): Promise<void> {
+  await adminFetch(token, { action: "delete_lead", id });
+}
+
 export async function getLeadDocumentUrl(token: string, documentId: string): Promise<string> {
   const r = await adminFetch<{ ok: true; url: string }>(token, {
     action: "get_lead_document_signed_url",

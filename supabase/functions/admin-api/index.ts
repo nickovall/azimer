@@ -668,6 +668,18 @@ Deno.serve(async (req) => {
     return json({ ok: true });
   }
 
+  // delete_lead — удалить мусорный/спам-лид безвозвратно.
+  // lead_documents / lead_messages / deal_commissions удалятся каскадом
+  // (ON DELETE CASCADE). Файлы в Storage остаются сиротами — для спама их нет,
+  // для реальных лидов это безвредно (просто место). kp_sessions → set null.
+  if (action === "delete_lead") {
+    const { id } = body;
+    if (!id) return json({ error: "Need id" }, 400);
+    const { error } = await sb.from("leads").delete().eq("id", id);
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true });
+  }
+
   // Сохранить новую версию КП — пересчёт после разговора с клиентом.
   // Браузер передаёт { state, estimate } (state = WizardState, estimate = результат calcEstimate)
   // — пишем lead.estimate, lead.catalog_version, добавляем запись в lead_documents (тип kp).
