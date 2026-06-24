@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAdmin } from "@/components/admin/AdminShell";
 import { adminFetch, fmtRub, type LeadFull } from "@/lib/admin-api";
+import { calculate } from "@/lib/calculator";
 import {
   calcEstimate,
   stateToInput,
@@ -18,6 +19,14 @@ import {
   optionItems,
   type WizardState,
 } from "@/lib/pricing";
+import {
+  type KpSpecLine,
+  buildDraftSpec,
+  specTotal,
+  isSpecArray,
+  blankSpecLine,
+  SPEC_GROUP_OPTIONS,
+} from "@/lib/kp-spec";
 
 export default function AdminKpEditorPageWrapper() {
   return (
@@ -39,6 +48,8 @@ function AdminKpEditorPage() {
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [versionLabel, setVersionLabel] = useState("после разговора с клиентом");
+  // Ручная смета. null = авто-расчёт движком; массив = ручной режим (правим строки).
+  const [spec, setSpec] = useState<KpSpecLine[] | null>(null);
 
   // Загрузить лида и пред-заполнить state
   const load = useCallback(async () => {
@@ -52,6 +63,8 @@ function AdminKpEditorPage() {
     try {
       const r = await adminFetch<{ ok: true; lead: LeadFull }>(token, { action: "get_lead", id });
       setLead(r.lead);
+      const savedSpec = (r.lead.estimate as Record<string, unknown> | null)?.spec;
+      setSpec(isSpecArray(savedSpec) ? savedSpec : null);
       const existing = (r.lead.estimate as Record<string, unknown> | null)?.state as Partial<WizardState> | undefined;
       if (existing) {
         setState({
@@ -91,25 +104,58 @@ function AdminKpEditorPage() {
     }
   }, [state]);
 
+  // Детальный расчёт движка (строки name/qty/unit с ценами) — нужен для черновика сметы.
+  const engineEstimate = useMemo(() => {
+    const valid = state.objectType && state.region && state.frame && state.length > 0 && state.width > 0 && state.height > 0;
+    if (!valid) return null;
+    try { return calculate(stateToInput(state)); } catch { return null; }
+  }, [state]);
+
+  const specSum = spec ? specTotal(spec) : 0;
+  const effectiveTotal = spec ? specSum : (estimate?.base ?? 0);
+
   const totalArea = state.length * state.width;
-  const perM2 = estimate && totalArea > 0 ? estimate.base / totalArea : 0;
+  const perM2 = effectiveTotal > 0 && totalArea > 0 ? effectiveTotal / totalArea : 0;
+
+  // ─── Управление ручной сметой ───
+  function enableManualSpec() {
+    if (engineEstimate) setSpec(buildDraftSpec(engineEstimate));
+  }
+  function reseedSpec() {
+    if (!engineEstimate) return;
+    if (!confirm("Пересобрать смету из расчёта движка? Ручные правки будут потеряны.")) return;
+    setSpec(buildDraftSpec(engineEstimate));
+  }
+  function updateLine(lineId: string, patch: Partial<KpSpecLine>) {
+    setSpec((cur) => cur ? cur.map((l) => (l.id === lineId ? { ...l, ...patch } : l)) : cur);
+  }
+  function removeLine(lineId: string) {
+    setSpec((cur) => cur ? cur.filter((l) => l.id !== lineId) : cur);
+  }
+  function addLine() {
+    setSpec((cur) => (cur ? [...cur, blankSpecLine()] : [blankSpecLine()]));
+  }
 
   async function handleSave() {
     if (!lead || !estimate) return;
     setSaving(true);
     setSaveResult(null);
     try {
+      // Ручная смета (если включена) задаёт итог; иначе берём расчёт движка.
+      const useSpec = !!spec && spec.length > 0;
+      const baseFinal = useSpec ? specSum : estimate.base;
       const r = await adminFetch<{ ok: true; version: number }>(token, {
         action: "save_lead_estimate",
         id: lead.id,
         estimate: {
           state,
-          base: estimate.base,
-          low: estimate.low,
-          high: estimate.high,
+          base: baseFinal,
+          low:  useSpec ? Math.round(baseFinal * 0.9) : estimate.low,
+          high: useSpec ? Math.round(baseFinal * 1.1) : estimate.high,
           area: estimate.area,
           wallArea: estimate.wallArea,
           lines: estimate.lines,
+          spec: useSpec ? spec : undefined,   // undefined → ключ не сохранится (вернули авто-расчёт)
           complexity: estimate.complexity,
           flags: estimate.flags,
           regionLabel: estimate.regionLabel,
@@ -133,6 +179,7 @@ function AdminKpEditorPage() {
     // Раньше клали { state, ... } — /kp не мог распарсить и падал в «Ошибка».
     const payload = {
       input: stateToInput(state),
+      spec: spec && spec.length > 0 ? spec : undefined,  // ручная смета → /kp покажет её
       client: { name: lead.company || lead.name, phone: lead.phone },
       leadId: lead.id,
       catalogVersion: estimate.catalogVersion ?? lead.catalog_version ?? null,
@@ -261,10 +308,14 @@ function AdminKpEditorPage() {
             <p className="text-xs uppercase tracking-wider text-graphite-900/40">Итог</p>
             {estimate ? (
               <>
-                <p className="mt-1 text-3xl font-bold text-graphite-900 tabular-nums">{fmtRub(estimate.base)}</p>
-                <p className="mt-1 text-xs text-graphite-900/50">
-                  Диапазон <span className="font-mono">{fmtRub(estimate.low)} — {fmtRub(estimate.high)}</span>
-                </p>
+                <p className="mt-1 text-3xl font-bold text-graphite-900 tabular-nums">{fmtRub(effectiveTotal)}</p>
+                {spec ? (
+                  <p className="mt-1 text-xs font-medium text-orange">✎ ручная смета ({spec.length} строк)</p>
+                ) : (
+                  <p className="mt-1 text-xs text-graphite-900/50">
+                    Диапазон <span className="font-mono">{fmtRub(estimate.low)} — {fmtRub(estimate.high)}</span>
+                  </p>
+                )}
                 {perM2 > 0 && (
                   <p className="mt-1 text-xs text-graphite-900/50">
                     ≈ <span className="font-mono">{perM2.toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ₽/м²</span>
@@ -340,6 +391,125 @@ function AdminKpEditorPage() {
           )}
         </aside>
       </div>
+
+      {/* ───────── Редактируемая смета (полная смета вручную) ───────── */}
+      <section className="mt-8 rounded-2xl border border-line bg-white p-5">
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-graphite-900">📋 Смета — позиции КП</h2>
+            <p className="mt-0.5 max-w-2xl text-xs text-graphite-900/50">
+              {spec
+                ? "Ручной режим: правь строки свободно, итог КП = сумма строк. Клиент видит группы и итог по группам, цену по строкам — нет."
+                : "Сейчас КП считает движок. Включи ручной режим, чтобы добавлять/удалять/переименовывать позиции и задавать цены."}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {!spec ? (
+              <button
+                onClick={enableManualSpec}
+                disabled={!engineEstimate}
+                className="rounded-full bg-graphite-950 px-4 py-2 text-xs font-semibold text-light hover:bg-orange disabled:opacity-50"
+              >
+                ✎ Редактировать смету вручную
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={reseedSpec}
+                  disabled={!engineEstimate}
+                  className="rounded-full border border-line px-4 py-2 text-xs font-medium text-graphite-900/70 hover:border-orange disabled:opacity-50"
+                >
+                  ↻ Пересобрать из расчёта
+                </button>
+                <button
+                  onClick={() => setSpec(null)}
+                  className="rounded-full border border-line px-4 py-2 text-xs font-medium text-graphite-900/70 hover:border-orange"
+                >
+                  ↩ Вернуть авто-расчёт
+                </button>
+              </>
+            )}
+          </div>
+        </header>
+
+        {spec && (
+          <div className="mt-4 space-y-2">
+            <div className="hidden gap-2 px-1 text-[10px] uppercase tracking-wider text-graphite-900/40 md:grid md:grid-cols-[1.5fr_84px_64px_120px_120px_28px]">
+              <span>Наименование</span>
+              <span className="text-right">Кол-во</span>
+              <span>Ед.</span>
+              <span>Группа</span>
+              <span className="text-right">Сумма ₽</span>
+              <span />
+            </div>
+
+            {spec.map((line) => (
+              <div
+                key={line.id}
+                className="grid grid-cols-2 gap-2 rounded-xl border border-line bg-light/20 p-2 md:grid-cols-[1.5fr_84px_64px_120px_120px_28px] md:items-center md:border-0 md:bg-transparent md:p-0"
+              >
+                <input
+                  value={line.name}
+                  onChange={(e) => updateLine(line.id, { name: e.target.value })}
+                  placeholder="Наименование"
+                  className="col-span-2 rounded-lg border border-line px-2 py-1.5 text-sm focus:border-orange focus:outline-none md:col-span-1"
+                />
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={line.quantity === 0 ? "" : line.quantity}
+                  onChange={(e) => updateLine(line.id, { quantity: e.target.value === "" ? 0 : Number(e.target.value) })}
+                  placeholder="Кол-во"
+                  className="rounded-lg border border-line px-2 py-1.5 text-right text-sm tabular-nums focus:border-orange focus:outline-none"
+                />
+                <input
+                  value={line.unit}
+                  onChange={(e) => updateLine(line.id, { unit: e.target.value })}
+                  placeholder="ед"
+                  className="rounded-lg border border-line px-2 py-1.5 text-sm focus:border-orange focus:outline-none"
+                />
+                <select
+                  value={line.group}
+                  onChange={(e) => updateLine(line.id, { group: e.target.value })}
+                  className="rounded-lg border border-line bg-white px-2 py-1.5 text-sm focus:border-orange focus:outline-none"
+                >
+                  {SPEC_GROUP_OPTIONS.map((o) => (
+                    <option key={o.id} value={o.id}>{o.label}</option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={line.total === 0 ? "" : line.total}
+                  onChange={(e) => updateLine(line.id, { total: e.target.value === "" ? 0 : Number(e.target.value) })}
+                  placeholder="₽"
+                  className="rounded-lg border border-line px-2 py-1.5 text-right text-sm tabular-nums focus:border-orange focus:outline-none"
+                />
+                <button
+                  onClick={() => removeLine(line.id)}
+                  title="Удалить строку"
+                  className="justify-self-end rounded-lg px-2 text-graphite-900/40 hover:text-red-600"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+              <button
+                onClick={addLine}
+                className="rounded-full border border-dashed border-line px-4 py-2 text-xs font-medium text-graphite-900/70 hover:border-orange"
+              >
+                + Добавить строку
+              </button>
+              <p className="text-sm">
+                <span className="text-graphite-900/50">Итог сметы: </span>
+                <span className="font-bold text-graphite-900 tabular-nums">{fmtRub(specSum)}</span>
+              </p>
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

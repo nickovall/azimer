@@ -4,9 +4,18 @@ import { useEffect, useState } from "react";
 import Container from "@/components/ui/Container";
 import { calculate, groupLinesByGroup, groupLabel, formatRub, getRegion, CATALOG_VERSION } from "@/lib/calculator";
 import type { BuildingInput, Estimate } from "@/lib/calculator/types";
+import {
+  type KpSpecLine,
+  isSpecArray,
+  groupSpec,
+  specGroupLabel,
+  specTotal,
+  specSplit,
+} from "@/lib/kp-spec";
 
 interface KpPayload {
   input: BuildingInput;
+  spec?: KpSpecLine[];               // ручная смета из редактора — если есть, рендерим её
   client?: { name?: string; phone?: string };
   leadId?: string;
   catalogVersion?: string;
@@ -34,6 +43,7 @@ function decodeInput(): KpPayload | null {
 
 export default function KpPage() {
   const [estimate, setEstimate] = useState<Estimate | null>(null);
+  const [manualSpec, setManualSpec] = useState<KpSpecLine[] | null>(null);
   const [client, setClient] = useState<{ name?: string; phone?: string } | null>(null);
   const [payloadMeta, setPayloadMeta] = useState<Omit<KpPayload, "input" | "client"> | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,8 +55,11 @@ export default function KpPage() {
       return;
     }
     try {
+      // Параметры/геометрию/что-входит считаем всегда из input.
+      // Спецификацию и итог берём из ручной сметы, если она в ссылке.
       const est = calculate(decoded.input);
       setEstimate(est);
+      setManualSpec(isSpecArray(decoded.spec) ? decoded.spec : null);
       setClient(decoded.client ?? null);
       setPayloadMeta({
         leadId: decoded.leadId,
@@ -76,8 +89,47 @@ export default function KpPage() {
     );
   }
 
-  const groups = groupLinesByGroup(estimate.lines);
   const today = new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
+
+  // Нормализованные группы для таблицы спецификации:
+  // manualSpec → ручные строки (цена уже клиентская); иначе движок + распределение наценки.
+  type SpecRow = { name: string; note?: string; quantity: number; unit: string; work: boolean };
+  type SpecGroupView = { key: string; label: string; total: number; rows: SpecRow[] };
+
+  const specGroups: SpecGroupView[] = manualSpec
+    ? Object.entries(groupSpec(manualSpec)).map(([key, ls]) => ({
+        key,
+        label: specGroupLabel(key),
+        total: ls.reduce((s, l) => s + (Number(l.total) || 0), 0),
+        rows: ls.map((l) => ({ name: l.name, note: l.note, quantity: l.quantity, unit: l.unit, work: l.category === "work" })),
+      }))
+    : (() => {
+        const groups = groupLinesByGroup(estimate.lines);
+        const directSum = Object.values(groups).reduce((s, ls) => s + ls.reduce((a, l) => a + l.total, 0), 0);
+        const mul = directSum > 0 ? estimate.totals.final / directSum : 1;
+        return Object.entries(groups).map(([key, ls]) => ({
+          key,
+          label: groupLabel(key),
+          total: Math.round(ls.reduce((s, l) => s + l.total, 0) * mul),
+          rows: ls.map((l) => ({ name: l.name, note: l.note, quantity: l.quantity, unit: l.unit, work: l.category === "work" })),
+        }));
+      })();
+
+  // Итоги: manualSpec → сумма строк; иначе из движка.
+  const finalTotal = manualSpec ? specTotal(manualSpec) : estimate.totals.final;
+  const lowTotal   = manualSpec ? Math.round(finalTotal * 0.9) : estimate.totals.low;
+  const highTotal  = manualSpec ? Math.round(finalTotal * 1.1) : estimate.totals.high;
+  const split = manualSpec
+    ? { ...specSplit(manualSpec), logistics: 0 }
+    : (() => {
+        const d = estimate.totals.materials + estimate.totals.works + estimate.totals.logistics;
+        const mul = d > 0 ? estimate.totals.final / d : 1;
+        return {
+          materials: Math.round(estimate.totals.materials * mul),
+          works: Math.round(estimate.totals.works * mul),
+          logistics: Math.round(estimate.totals.logistics * mul),
+        };
+      })();
 
   return (
     <div className="bg-light pb-24 pt-32 print:pt-0">
@@ -154,75 +206,54 @@ export default function KpPage() {
         <div className="mb-8">
           <p className="mb-4 font-mono text-xs uppercase tracking-[0.2em] text-orange">Спецификация и смета</p>
 
-          {(() => {
-            // Распределяем НР+СП+маржу+наценку пропорционально на каждую группу
-            const directSum = Object.values(groups).reduce(
-              (s, ls) => s + ls.reduce((a, l) => a + l.total, 0), 0,
-            );
-            const mul = directSum > 0 ? estimate.totals.final / directSum : 1;
-            return Object.entries(groups).map(([groupKey, lines]) => {
-              const groupTotalRaw = lines.reduce((s, l) => s + l.total, 0);
-              const groupTotal = Math.round(groupTotalRaw * mul);
-              return (
-                <div key={groupKey} className="mb-6 rounded-2xl border border-line bg-white overflow-hidden">
-                  <div className="flex items-center justify-between border-b border-line bg-light/50 px-6 py-3">
-                    <p className="font-semibold text-graphite-900">{groupLabel(groupKey)}</p>
-                    <p className="text-sm font-bold text-orange">{formatRub(groupTotal)}</p>
-                  </div>
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-line/50 text-xs uppercase tracking-wider text-graphite-900/40">
-                        <th className="px-6 py-2 text-left font-medium">Наименование</th>
-                        <th className="px-2 py-2 text-right font-medium">Кол-во</th>
-                        <th className="px-2 py-2 text-right font-medium">Ед.</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {lines.map((l, i) => (
-                        <tr key={i} className="border-b border-line/30 last:border-0">
-                          <td className="px-6 py-2.5">
-                            <div className={`${l.category === "work" ? "italic text-graphite-900/70" : "text-graphite-900"}`}>
-                              {l.name}
-                            </div>
-                            {l.note && <div className="mt-0.5 text-xs text-graphite-900/40">{l.note}</div>}
-                          </td>
-                          <td className="px-2 py-2.5 text-right font-mono">{l.quantity}</td>
-                          <td className="px-2 py-2.5 text-right text-graphite-900/60">{l.unit}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            });
-          })()}
+          {specGroups.map((g) => (
+            <div key={g.key} className="mb-6 rounded-2xl border border-line bg-white overflow-hidden">
+              <div className="flex items-center justify-between border-b border-line bg-light/50 px-6 py-3">
+                <p className="font-semibold text-graphite-900">{g.label}</p>
+                <p className="text-sm font-bold text-orange">{formatRub(g.total)}</p>
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-line/50 text-xs uppercase tracking-wider text-graphite-900/40">
+                    <th className="px-6 py-2 text-left font-medium">Наименование</th>
+                    <th className="px-2 py-2 text-right font-medium">Кол-во</th>
+                    <th className="px-2 py-2 text-right font-medium">Ед.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {g.rows.map((l, i) => (
+                    <tr key={i} className="border-b border-line/30 last:border-0">
+                      <td className="px-6 py-2.5">
+                        <div className={`${l.work ? "italic text-graphite-900/70" : "text-graphite-900"}`}>
+                          {l.name}
+                        </div>
+                        {l.note && <div className="mt-0.5 text-xs text-graphite-900/40">{l.note}</div>}
+                      </td>
+                      <td className="px-2 py-2.5 text-right font-mono">{l.quantity}</td>
+                      <td className="px-2 py-2.5 text-right text-graphite-900/60">{l.unit}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
         </div>
 
         {/* ─────────── Итоги (без раскрытия маржи клиенту) ─────────── */}
         <div className="rounded-2xl bg-graphite-950 p-8 text-light">
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-orange">Итого</p>
-          {(() => {
-            // Распределяем накладные/прибыль/маржу/наценку пропорционально на материалы и работы
-            const directSum = estimate.totals.materials + estimate.totals.works + estimate.totals.logistics;
-            const mul = directSum > 0 ? estimate.totals.final / directSum : 1;
-            const matFinal = Math.round(estimate.totals.materials * mul);
-            const wrkFinal = Math.round(estimate.totals.works * mul);
-            const logFinal = Math.round(estimate.totals.logistics * mul);
-            return (
-              <div className="mt-5 space-y-2 text-sm">
-                <Row label="Материалы (с доставкой и расходниками)" value={formatRub(matFinal)} />
-                <Row label="Работы (монтаж, сборка, отделка)" value={formatRub(wrkFinal)} />
-                {logFinal > 0 && <Row label="Логистика по направлению" value={formatRub(logFinal)} />}
-              </div>
-            );
-          })()}
+          <div className="mt-5 space-y-2 text-sm">
+            <Row label="Материалы (с доставкой и расходниками)" value={formatRub(split.materials)} />
+            <Row label="Работы (монтаж, сборка, отделка)" value={formatRub(split.works)} />
+            {split.logistics > 0 && <Row label="Логистика по направлению" value={formatRub(split.logistics)} />}
+          </div>
           <div className="mt-6 border-t border-light/20 pt-6">
             <div className="flex items-baseline justify-between">
               <span className="text-lg font-semibold">Итоговая стоимость</span>
-              <span className="text-4xl font-extrabold tracking-tight text-orange">{formatRub(estimate.totals.final)}</span>
+              <span className="text-4xl font-extrabold tracking-tight text-orange">{formatRub(finalTotal)}</span>
             </div>
             <p className="mt-2 text-xs text-light/50">
-              Диапазон уточнения: {formatRub(estimate.totals.low)} — {formatRub(estimate.totals.high)}
+              Диапазон уточнения: {formatRub(lowTotal)} — {formatRub(highTotal)}
             </p>
           </div>
         </div>
@@ -294,12 +325,6 @@ export default function KpPage() {
           >
             🖨 Распечатать / Сохранить PDF
           </button>
-          <a
-            href="/contacts"
-            className="inline-flex items-center gap-2 rounded-full border border-graphite-900/20 px-7 py-3.5 text-sm font-semibold text-graphite-900 transition-colors hover:border-orange"
-          >
-            Связаться с менеджером
-          </a>
         </div>
 
         {/* ─────────── Подпись + QR на сайт ─────────── */}

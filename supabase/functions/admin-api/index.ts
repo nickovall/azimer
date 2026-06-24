@@ -1482,8 +1482,11 @@ function buildKpUrlForLead(lead: any): string {
   if (!est) return SITE_URL + "/kp/";
   try {
     const input = est.input ?? estimateStateToInput(est.state ?? {}, lead);
+    // Ручная смета (если менеджер правил позиции) → /kp покажет её вместо пересчёта.
+    const spec = Array.isArray(est.spec) && est.spec.length > 0 ? est.spec : undefined;
     const payload = {
       input,
+      spec,
       client: { name: lead?.name, phone: lead?.phone },
       leadId: lead?.id,
       catalogVersion: lead?.catalog_version ?? est.catalogVersion ?? null,
