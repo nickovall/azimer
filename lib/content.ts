@@ -153,8 +153,8 @@ export const objectTypes = [
     tag: "Склады",
     title: "Складские комплексы",
     text: "Тёплые и холодные склады для хранения и логистики.",
-    img: "/photos/obj-sklad.jpg",
-    imgPos: "top" as const,         // ворота и здание сверху, низ — снег
+    img: "/photos/obj-warehouse.jpg",
+    imgPos: "center" as const,      // реальное здание АЗИМЕР — ворота по центру кадра
   },
   {
     tag: "Ангары",
@@ -195,14 +195,14 @@ export const trustDocs = [
 
 export const gallery = [
   {
-    img: "/photos/interior.jpg",
+    img: "/photos/frame-contour.jpg",
     caption: "Каркас и контур здания",
     feature: true,
   },
   { img: "/photos/proc-frame.jpg", caption: "Монтаж металлокаркаса", feature: false },
   { img: "/photos/proc-panel.jpg", caption: "Монтаж сэндвич-панелей", feature: false },
   { img: "/photos/proc-welding.jpg", caption: "Сварочные работы", feature: false },
-  { img: "/photos/proc-roof.jpg", caption: "Кровельные работы", feature: false },
+  { img: "/photos/proc-roofing.jpg", caption: "Кровельные работы", feature: false },
 ];
 
 export const servicesDetailed = [
@@ -313,8 +313,8 @@ export type ProjectCase = {
 
 export const projects: ProjectCase[] = [
   {
-    img: "/photos/obj-sklad.jpg",
-    imgPos: "top",
+    img: "/photos/obj-warehouse.jpg",
+    imgPos: "center",
     tag: "Склад",
     title: "Складское здание",
     text: "Утеплённое каркасное здание с закрытым контуром под складские задачи.",
@@ -369,8 +369,8 @@ export const projects: ProjectCase[] = [
     text: "Изготовление и монтаж нестандартных металлоконструкций.",
   },
   {
-    img: "/photos/proc-roof.jpg",
-    imgPos: "top",
+    img: "/photos/proc-roofing.jpg",
+    imgPos: "center",
     tag: "Кровля",
     title: "Кровельные работы",
     text: "Монтаж кровли и закрытие контура здания.",
