@@ -5,7 +5,8 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { TextField, TextArea, ChoiceField } from "./ui/Field";
 import { clientTypes } from "@/lib/content";
-import { submitLead } from "@/lib/supabase";
+import { submitLead, LeadValidationError } from "@/lib/supabase";
+import { useAntibot, Honeypot } from "./Antibot";
 
 export default function ContactForm() {
   const [sent, setSent] = useState(false);
@@ -18,6 +19,7 @@ export default function ContactForm() {
     email: "",
     message: "",
   });
+  const { honeypot, setHoneypot, guard } = useAntibot();
 
   const update =
     (key: keyof typeof form) =>
@@ -69,11 +71,14 @@ export default function ContactForm() {
             phone: form.phone,
             email: form.email || undefined,
             message: form.message || undefined,
+            ...guard(),
           });
           setSent(true);
         } catch (err) {
           console.error(err);
-          setError("Не удалось отправить заявку. Проверьте связь и попробуйте ещё раз.");
+          setError(err instanceof LeadValidationError
+            ? err.message
+            : "Не удалось отправить заявку. Проверьте связь и попробуйте ещё раз.");
         } finally {
           setSubmitting(false);
         }
@@ -118,6 +123,8 @@ export default function ContactForm() {
           onChange={update("message")}
         />
       </div>
+
+      <Honeypot value={honeypot} onChange={setHoneypot} />
 
       <button
         type="submit"

@@ -19,7 +19,8 @@ import {
 } from "@/lib/pricing";
 import { TextField, ChoiceField } from "../ui/Field";
 import { clientTypes } from "@/lib/content";
-import { submitLead } from "@/lib/supabase";
+import { submitLead, LeadValidationError } from "@/lib/supabase";
+import { useAntibot, Honeypot } from "../Antibot";
 import dynamic from "next/dynamic";
 
 const KpDownloadButton = dynamic(() => import("./KpDownloadButton"), {
@@ -197,6 +198,7 @@ export default function RaschetWizard() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const { honeypot, setHoneypot, guard } = useAntibot();
 
   const steps: StepId[] =
     state.frame === "modular"
@@ -538,6 +540,8 @@ export default function RaschetWizard() {
           ← Назад
         </button>
 
+        <Honeypot value={honeypot} onChange={setHoneypot} />
+
         {current === "result" ? (
           <button
             type="button"
@@ -554,11 +558,14 @@ export default function RaschetWizard() {
                   phone: contact.phone,
                   object_type: state.objectType || undefined,
                   estimate: { state, ...estimate },
+                  ...guard(),
                 });
                 setSubmitted(true);
               } catch (err) {
                 console.error(err);
-                setSubmitError("Не удалось отправить заявку. Проверьте связь и попробуйте ещё раз.");
+                setSubmitError(err instanceof LeadValidationError
+                  ? err.message
+                  : "Не удалось отправить заявку. Проверьте связь и попробуйте ещё раз.");
               } finally {
                 setSubmitting(false);
               }

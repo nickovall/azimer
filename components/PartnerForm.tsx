@@ -4,7 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { TextField, TextArea } from "./ui/Field";
-import { submitLead } from "@/lib/supabase";
+import { submitLead, LeadValidationError } from "@/lib/supabase";
+import { useAntibot, Honeypot } from "./Antibot";
 
 export default function PartnerForm() {
   const [sent, setSent] = useState(false);
@@ -18,6 +19,7 @@ export default function PartnerForm() {
     direction: "",
     message: "",
   });
+  const { honeypot, setHoneypot, guard } = useAntibot();
 
   const update =
     (key: keyof typeof form) =>
@@ -70,11 +72,14 @@ export default function PartnerForm() {
             company: form.company || undefined,
             direction: form.direction || undefined,
             message: form.message || undefined,
+            ...guard(),
           });
           setSent(true);
         } catch (err) {
           console.error(err);
-          setError("Не удалось отправить заявку. Проверьте связь и попробуйте ещё раз.");
+          setError(err instanceof LeadValidationError
+            ? err.message
+            : "Не удалось отправить заявку. Проверьте связь и попробуйте ещё раз.");
         } finally {
           setSubmitting(false);
         }
@@ -128,6 +133,8 @@ export default function PartnerForm() {
           onChange={update("message")}
         />
       </div>
+
+      <Honeypot value={honeypot} onChange={setHoneypot} />
 
       <button
         type="submit"

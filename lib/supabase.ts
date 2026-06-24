@@ -33,7 +33,17 @@ export interface LeadInsert {
   utm_term?:     string;
   referrer?:     string;
   landing_page?: string;
+  // Антибот-метаданные (в БД НЕ пишутся): honeypot + время рендера формы.
+  _hp?: string;
+  _t?:  number;
 }
+
+// Ошибка валидации, которую форма показывает пользователю как есть
+// (в отличие от технических ошибок, где показываем generic-сообщение).
+export class LeadValidationError extends Error {}
+
+// Минимальное время заполнения формы (мс). Быстрее — почти наверняка бот.
+const ANTIBOT_MIN_FILL_MS = 1500;
 
 const ALLOWED_UPLOAD_TYPES = new Set([
   "application/pdf",
@@ -75,6 +85,18 @@ export async function submitLead(data: LeadInsert): Promise<void> {
   if (!supabase) {
     throw new Error("Supabase is not configured");
   }
+
+  // ─── Антибот ───
+  // 1) Honeypot заполнен → бот. Тихо «успех» (не палим ловушку), в БД не пишем.
+  if (typeof data._hp === "string" && data._hp.trim() !== "") return;
+  // 2) Форма отправлена мгновенно → бот. Тоже тихо игнорируем.
+  if (typeof data._t === "number" && Number.isFinite(data._t) && Date.now() - data._t < ANTIBOT_MIN_FILL_MS) return;
+  // 3) Телефон должен содержать минимум 10 цифр (реальный РФ-номер). Боты шлют
+  //    мусор вроде "NqvHukzEwpwDBDtFxDSfzjhJ" — отсекаем с понятной ошибкой.
+  if ((data.phone ?? "").replace(/\D/g, "").length < 10) {
+    throw new LeadValidationError("Проверьте номер телефона — нужно не меньше 10 цифр.");
+  }
+
   // Подмешиваем UTM-метки и landing page — захвачены при первом визите.
   const utm = readUtm();
   const enriched = stripUndefined({

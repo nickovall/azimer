@@ -5,7 +5,8 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { TextField, TextArea, FieldLabel, ChoiceField } from "./ui/Field";
 import { clientTypes } from "@/lib/content";
-import { submitLead, uploadLeadFile } from "@/lib/supabase";
+import { submitLead, uploadLeadFile, LeadValidationError } from "@/lib/supabase";
+import { useAntibot, Honeypot } from "./Antibot";
 
 function formatSize(bytes: number) {
   if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + " КБ";
@@ -26,6 +27,7 @@ export default function ProjectForm() {
   });
   const [files, setFiles] = useState<File[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { honeypot, setHoneypot, guard } = useAntibot();
 
   const update =
     (key: keyof typeof form) =>
@@ -90,11 +92,14 @@ export default function ProjectForm() {
             object_type: form.objectType || undefined,
             message: form.description || undefined,
             files: fileUrls.length ? fileUrls : undefined,
+            ...guard(),
           });
           setSent(true);
         } catch (err) {
           console.error(err);
-          setError("Не удалось отправить проект. Проверьте файлы и попробуйте ещё раз.");
+          setError(err instanceof LeadValidationError
+            ? err.message
+            : "Не удалось отправить проект. Проверьте файлы и попробуйте ещё раз.");
         } finally {
           setSubmitting(false);
         }
@@ -211,6 +216,8 @@ export default function ProjectForm() {
           )}
         </div>
       </div>
+
+      <Honeypot value={honeypot} onChange={setHoneypot} />
 
       <button
         type="submit"
