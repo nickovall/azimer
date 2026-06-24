@@ -28,9 +28,13 @@ function decodeInput(): KpPayload | null {
   if (typeof window === "undefined") return null;
   try {
     const hash = window.location.hash.slice(1);
-    const params = new URLSearchParams(hash);
-    const dataRaw = params.get("data");
-    if (!dataRaw) return null;
+    // НЕ через URLSearchParams: он превращает '+' в пробел и ломает сырой base64
+    // от редактора КП и серверного buildKpUrlForLead (там '+' встречается часто).
+    // decodeURIComponent корректно обрабатывает оба варианта: сырой '+' (оставляет)
+    // и бот-вариант '%2B' (раскодирует). Это и была причина «Не удалось загрузить».
+    const m = hash.match(/(?:^|&)data=([^&]*)/);
+    if (!m) return null;
+    const dataRaw = decodeURIComponent(m[1]);
     const decoded = decodeURIComponent(escape(atob(dataRaw)));
     const parsed = JSON.parse(decoded);
     if (parsed?.input) return parsed;
