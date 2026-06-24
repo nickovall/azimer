@@ -348,7 +348,7 @@ export const projects: ProjectCase[] = [
     text: "Внутренний монтаж модульного блок-контейнера — утепление и каркас перегородок.",
   },
   {
-    img: "/photos/interior.jpg",
+    img: "/photos/frame-contour.jpg",
     imgPos: "center",
     tag: "Производство",
     title: "Производственный корпус",
