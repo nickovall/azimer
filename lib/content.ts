@@ -11,8 +11,10 @@ export const company = {
   vkHandle: "@mavlyanov2018",
   vkProfileHref: "https://vk.com/mavlyanov2018",
   vkChatHref: "https://vk.me/mavlyanov2018",
-  email: "info@azimer.ru",
-  emailHref: "mailto:info@azimer.ru",
+  // Временно вернули рабочий Mail.ru-ящик: пересылка info@azimer.ru через Cloudflare теряла письма.
+  // Вернуть на info@azimer.ru после переноса на реальный ящик VK WorkSpace.
+  email: "azimer_sk@mail.ru",
+  emailHref: "mailto:azimer_sk@mail.ru",
   siteHref: "https://azimer.ru/",
   qrSiteHref: "https://azimer.ru/",
   legalAddress: "660020, Красноярский край, г. Красноярск, ул. Караульная, д. 88, офис 9-21",

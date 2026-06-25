@@ -12,8 +12,9 @@ Use this file for public contact UI, CTA blocks, and KP/PDF contact actions.
 - VK handle: `@mavlyanov2018`
 - VK profile URL: `https://vk.com/mavlyanov2018`
 - VK chat URL: `https://vk.me/mavlyanov2018`
-- Email: `info@azimer.ru` (switched 2026-06-12)
-- Email href: `mailto:info@azimer.ru`
+- Email: `azimer_sk@mail.ru` (temporarily reverted 2026-06-25 — Cloudflare forwarding of `info@azimer.ru` was silently failing/losing mail; restore `info@azimer.ru` once it lives on a real VK WorkSpace mailbox)
+- Email href: `mailto:azimer_sk@mail.ru`
+- Note: Resend outbound sender stays `info@azimer.ru` (send.azimer.ru envelope works) — only the public site contact email was reverted.
 
 ## QR Target
 
