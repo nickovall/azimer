@@ -183,6 +183,10 @@ export default function KpPage() {
             стоимость фиксируется менеджером после проверки заявки, нагрузок и
             спецификации.
           </p>
+          <p className="mt-2">
+            Документ носит предварительный характер и не является офертой.
+            Официальная цена — только в КП, подтверждённом менеджером АЗИМЕР напрямую.
+          </p>
           <p className="mt-2 font-mono text-[11px] text-graphite-900/45">
             Текущий каталог: {CATALOG_VERSION}
             {payloadMeta?.catalogVersion ? ` · каталог ссылки: ${payloadMeta.catalogVersion}` : ""}
