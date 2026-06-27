@@ -7,6 +7,7 @@ import ConsentCheckbox from "./ui/ConsentCheckbox";
 import { clientTypes } from "@/lib/content";
 import { submitLead, LeadValidationError } from "@/lib/supabase";
 import { useAntibot, Honeypot } from "./Antibot";
+import Turnstile from "./Turnstile";
 
 export default function ContactForm() {
   const [sent, setSent] = useState(false);
@@ -21,6 +22,7 @@ export default function ContactForm() {
     message: "",
   });
   const { honeypot, setHoneypot, guard } = useAntibot();
+  const [token, setToken] = useState<string | null>(null);
 
   const update =
     (key: keyof typeof form) =>
@@ -73,7 +75,7 @@ export default function ContactForm() {
             email: form.email || undefined,
             message: form.message || undefined,
             ...guard(),
-          });
+          }, token ?? undefined);
           setSent(true);
         } catch (err) {
           console.error(err);
@@ -128,6 +130,10 @@ export default function ContactForm() {
       <Honeypot value={honeypot} onChange={setHoneypot} />
 
       <ConsentCheckbox checked={consent} onChange={setConsent} />
+
+      <div className="mt-5">
+        <Turnstile onToken={setToken} />
+      </div>
 
       <button
         type="submit"

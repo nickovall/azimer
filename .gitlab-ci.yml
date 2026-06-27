@@ -8,6 +8,7 @@ variables:
   # Obscurity-ключ доступа к админке — не секрет (всегда попадает в JS bundle),
   # а просто фильтр URL'ов чтобы скрытая админка не индексировалась случайно.
   NEXT_PUBLIC_ADMIN_GATE_KEY: Az9pK2m4Tn7Wq3
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY: 0x4AAAAAADrebGJlbPB3bOwy
 
 stages:
   - pages
@@ -48,6 +49,6 @@ edge_functions:
     - npm ci --prefer-offline --no-audit
     - npm run gen:catalog
     - npm run build:bot-bundle
-    - npx supabase functions deploy telegram-bot admin-api --no-verify-jwt --project-ref objgpsjyftdrhafapwvw
+    - npx supabase functions deploy telegram-bot admin-api submit-lead --no-verify-jwt --project-ref objgpsjyftdrhafapwvw
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $SUPABASE_ACCESS_TOKEN'

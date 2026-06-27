@@ -6,6 +6,7 @@ import { TextField, TextArea } from "./ui/Field";
 import ConsentCheckbox from "./ui/ConsentCheckbox";
 import { submitLead, LeadValidationError } from "@/lib/supabase";
 import { useAntibot, Honeypot } from "./Antibot";
+import Turnstile from "./Turnstile";
 
 export default function PartnerForm() {
   const [sent, setSent] = useState(false);
@@ -21,6 +22,7 @@ export default function PartnerForm() {
     message: "",
   });
   const { honeypot, setHoneypot, guard } = useAntibot();
+  const [token, setToken] = useState<string | null>(null);
 
   const update =
     (key: keyof typeof form) =>
@@ -74,7 +76,7 @@ export default function PartnerForm() {
             direction: form.direction || undefined,
             message: form.message || undefined,
             ...guard(),
-          });
+          }, token ?? undefined);
           setSent(true);
         } catch (err) {
           console.error(err);
@@ -138,6 +140,10 @@ export default function PartnerForm() {
       <Honeypot value={honeypot} onChange={setHoneypot} />
 
       <ConsentCheckbox checked={consent} onChange={setConsent} />
+
+      <div className="mt-5">
+        <Turnstile onToken={setToken} />
+      </div>
 
       <button
         type="submit"

@@ -3,6 +3,7 @@ import { readUtm } from "@/lib/utm";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+const functionsUrl = url ? `${url.replace(/\/$/, "")}/functions/v1` : "";
 
 export const supabaseConfigured = Boolean(url && anonKey);
 
@@ -81,7 +82,7 @@ function stripUndefined<T extends Record<string, unknown>>(value: T): Partial<T>
  * строку обратно и спотыкается о SELECT-политику (anon без прав на чтение).
  * Без .select() запрос идёт с `return=minimal` → INSERT проходит чисто.
  */
-export async function submitLead(data: LeadInsert): Promise<void> {
+export async function submitLead(data: LeadInsert, turnstileToken?: string): Promise<void> {
   if (!supabase) {
     throw new Error("Supabase is not configured");
   }
@@ -122,6 +123,31 @@ export async function submitLead(data: LeadInsert): Promise<void> {
   if (!enriched.name || !enriched.phone) {
     throw new Error("Name and phone are required");
   }
+
+  // 1) Защищённый путь: Edge Function с серверной проверкой Turnstile (если есть токен).
+  //    Боты без валидного токена сюда не пройдут.
+  if (turnstileToken && functionsUrl && anonKey) {
+    try {
+      const res = await fetch(`${functionsUrl}/submit-lead`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: anonKey,
+          Authorization: `Bearer ${anonKey}`,
+        },
+        body: JSON.stringify({ token: turnstileToken, lead: enriched }),
+      });
+      if (res.ok) return;
+      // Функция отклонила — во время раскатки лид не теряем: проваливаемся
+      // в прямую вставку ниже (RLS ещё открыт). После lockdown прямая вставка
+      // не пройдёт и пользователь увидит ошибку.
+    } catch {
+      // сеть/функция недоступна → fallback
+    }
+  }
+
+  // 2) Fallback: прямая вставка (текущее поведение). После lockdown anon-insert
+  //    закрыт — единственный рабочий путь будет через функцию с токеном.
   const { error } = await supabase.from("leads").insert(enriched);
   if (error) {
     console.error("[supabase] insert error:", error.message);

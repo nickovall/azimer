@@ -7,6 +7,7 @@ import ConsentCheckbox from "./ui/ConsentCheckbox";
 import { clientTypes } from "@/lib/content";
 import { submitLead, uploadLeadFile, LeadValidationError } from "@/lib/supabase";
 import { useAntibot, Honeypot } from "./Antibot";
+import Turnstile from "./Turnstile";
 
 function formatSize(bytes: number) {
   if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + " КБ";
@@ -29,6 +30,7 @@ export default function ProjectForm() {
   const [files, setFiles] = useState<File[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const { honeypot, setHoneypot, guard } = useAntibot();
+  const [token, setToken] = useState<string | null>(null);
 
   const update =
     (key: keyof typeof form) =>
@@ -94,7 +96,7 @@ export default function ProjectForm() {
             message: form.description || undefined,
             files: fileUrls.length ? fileUrls : undefined,
             ...guard(),
-          });
+          }, token ?? undefined);
           setSent(true);
         } catch (err) {
           console.error(err);
@@ -221,6 +223,10 @@ export default function ProjectForm() {
       <Honeypot value={honeypot} onChange={setHoneypot} />
 
       <ConsentCheckbox checked={consent} onChange={setConsent} />
+
+      <div className="mt-5">
+        <Turnstile onToken={setToken} />
+      </div>
 
       <button
         type="submit"
