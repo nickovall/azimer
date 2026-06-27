@@ -206,16 +206,16 @@ function AdminKpEditorPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <Link href={`/console-x9p4m2/leads/view/?id=${lead.id}`} className="text-xs text-orange hover:underline">
           ← К карточке
         </Link>
-        <span className="font-mono text-xs text-graphite-900/30">{lead.lead_code ?? lead.id.slice(0, 8)}</span>
+        <span className="min-w-0 truncate font-mono text-xs text-graphite-900/30">{lead.lead_code ?? lead.id.slice(0, 8)}</span>
       </div>
 
       <header className="mt-3 border-b border-line pb-5">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-orange">🧮 Редактор КП</p>
-        <h1 className="mt-1 text-3xl font-bold text-graphite-900">{lead.company || lead.name}</h1>
+        <h1 className="mt-1 break-words text-2xl font-bold text-graphite-900 sm:text-3xl">{lead.company || lead.name}</h1>
         <p className="mt-1 text-sm text-graphite-900/60">
           Тот же движок что на сайте · 117 тестов СНиП · меняй параметры — цифры справа обновляются на лету
         </p>
@@ -241,7 +241,7 @@ function AdminKpEditorPage() {
           </FieldGroup>
 
           <FieldGroup title="📐 Размеры">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid gap-3 sm:grid-cols-3">
               <NumberInput label="Длина, м" value={state.length} onChange={(v) => setState((s) => ({ ...s, length: v }))} min={1} max={200} />
               <NumberInput label="Ширина, м" value={state.width} onChange={(v) => setState((s) => ({ ...s, width: v }))} min={1} max={200} />
               <NumberInput label="Высота, м" value={state.height} onChange={(v) => setState((s) => ({ ...s, height: v }))} min={1} max={30} step={0.5} />
@@ -284,7 +284,7 @@ function AdminKpEditorPage() {
           </FieldGroup>
 
           <FieldGroup title="🚪 Доборные">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid gap-3 sm:grid-cols-3">
               {optionItems.map((opt) => (
                 <NumberInput
                   key={opt.id}
@@ -296,7 +296,7 @@ function AdminKpEditorPage() {
                 />
               ))}
             </div>
-            <p className="mt-2 text-xs text-graphite-900/45">
+            <p className="mt-2 break-words text-xs text-graphite-900/45">
               {optionItems.map((o) => `${o.label} ≈ ${fmtRub(o.price)}/шт`).join(" · ")}
             </p>
           </FieldGroup>
@@ -446,13 +446,13 @@ function AdminKpEditorPage() {
             {spec.map((line) => (
               <div
                 key={line.id}
-                className="grid grid-cols-2 gap-2 rounded-xl border border-line bg-light/20 p-2 md:grid-cols-[1.5fr_84px_64px_120px_120px_28px] md:items-center md:border-0 md:bg-transparent md:p-0"
+                className="grid gap-2 rounded-xl border border-line bg-light/20 p-2 sm:grid-cols-2 md:grid-cols-[1.5fr_84px_64px_120px_120px_28px] md:items-center md:border-0 md:bg-transparent md:p-0"
               >
                 <input
                   value={line.name}
                   onChange={(e) => updateLine(line.id, { name: e.target.value })}
                   placeholder="Наименование"
-                  className="col-span-2 rounded-lg border border-line px-2 py-1.5 text-sm focus:border-orange focus:outline-none md:col-span-1"
+                  className="rounded-lg border border-line px-2 py-1.5 text-sm focus:border-orange focus:outline-none sm:col-span-2 md:col-span-1"
                 />
                 <input
                   type="number"

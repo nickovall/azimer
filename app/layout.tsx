@@ -7,6 +7,7 @@ import Footer from "@/components/Footer";
 import MobileStickyCta from "@/components/MobileStickyCta";
 import Analytics from "@/components/Analytics";
 import CookieBanner from "@/components/CookieBanner";
+import HideOnAdminRoutes from "@/components/HideOnAdminRoutes";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -115,7 +116,9 @@ export default function RootLayout({
         <SmoothScroll>
           <Header />
           <main>{children}</main>
-          <Footer />
+          <HideOnAdminRoutes>
+            <Footer />
+          </HideOnAdminRoutes>
         </SmoothScroll>
         <MobileStickyCta />
         <CookieBanner />

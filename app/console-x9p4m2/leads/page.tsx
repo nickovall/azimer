@@ -149,7 +149,7 @@ export default function AdminLeadsListPage() {
 
   return (
     <div>
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-line pb-5">
+      <header className="flex flex-col gap-3 border-b border-line pb-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-orange">Воронка</p>
           <h1 className="mt-1 text-3xl font-bold text-graphite-900">Заявки и сделки</h1>
@@ -159,14 +159,14 @@ export default function AdminLeadsListPage() {
         </div>
         <Link
           href="/console-x9p4m2/leads/new/"
-          className="shrink-0 rounded-full bg-orange px-5 py-2.5 text-sm font-semibold text-white hover:bg-orange-bright"
+          className="w-full shrink-0 rounded-full bg-orange px-5 py-2.5 text-center text-sm font-semibold text-white hover:bg-orange-bright sm:w-auto"
         >
           ➕ Добавить заявку
         </Link>
       </header>
 
       {/* Переключатель вида + поиск */}
-      <div className="mt-5 flex flex-wrap items-center gap-3">
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
         <div className="inline-flex rounded-full border border-line bg-white p-0.5 text-xs font-medium">
           <button
             onClick={() => setView("board")}
@@ -186,7 +186,7 @@ export default function AdminLeadsListPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={view === "board" ? "Поиск по имени, телефону, Lead ID…" : "Lead ID, имя, телефон, email…"}
-          className="min-w-0 flex-1 rounded-full border border-line bg-white px-4 py-2 text-sm focus:border-orange focus:outline-none"
+          className="min-w-0 rounded-full border border-line bg-white px-4 py-2 text-sm focus:border-orange focus:outline-none sm:flex-1"
         />
       </div>
 
@@ -394,7 +394,7 @@ function LeadCard({
         <button
           onClick={(e) => { e.stopPropagation(); e.preventDefault(); onDelete(lead); }}
           title="Удалить заявку (для мусора/спама)"
-          className="absolute right-1 top-1 z-10 hidden rounded-md px-1.5 py-0.5 text-xs text-graphite-900/30 transition-colors hover:bg-red-50 hover:text-red-600 group-hover:block"
+          className="absolute right-1 top-1 z-10 rounded-md px-1.5 py-0.5 text-xs text-graphite-900/35 transition-colors hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100"
         >
           ✕
         </button>

@@ -57,3 +57,6 @@ next-env.d.ts
 
 # Playwright/audit screenshot artifacts (regenerable, audits reference paths only)
 /output/
+
+# Local dev-server logs (Codex/Claude background runs)
+/.dev-*.log

@@ -105,7 +105,7 @@ export default function AdminTemplatesPage() {
       </div>
 
       <div className="my-6 flex flex-wrap items-center gap-3">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {(["all", "sms", "email"] as const).map((c) => (
             <button
               key={c}
@@ -121,11 +121,11 @@ export default function AdminTemplatesPage() {
             </button>
           ))}
         </div>
-        <div className="ml-auto flex gap-2">
-          <button onClick={() => startNew("sms")} className="rounded-full bg-orange px-4 py-2 text-xs font-semibold text-white hover:bg-orange-bright">
+        <div className="flex w-full gap-2 sm:ml-auto sm:w-auto">
+          <button onClick={() => startNew("sms")} className="flex-1 rounded-full bg-orange px-4 py-2 text-xs font-semibold text-white hover:bg-orange-bright sm:flex-none">
             + Новый SMS
           </button>
-          <button onClick={() => startNew("email")} className="rounded-full bg-graphite-950 px-4 py-2 text-xs font-semibold text-light hover:bg-graphite-900">
+          <button onClick={() => startNew("email")} className="flex-1 rounded-full bg-graphite-950 px-4 py-2 text-xs font-semibold text-light hover:bg-graphite-900 sm:flex-none">
             + Новый Email
           </button>
         </div>
@@ -141,9 +141,9 @@ export default function AdminTemplatesPage() {
             key={t.id}
             className={`rounded-2xl border bg-white p-4 ${t.is_active ? "border-line" : "border-line/40 opacity-50"}`}
           >
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded bg-light px-2 py-0.5 text-[10px] uppercase tracking-wider">{t.channel}</span>
                   <span className="font-mono text-xs text-graphite-900/40">{t.slug}</span>
                   {!t.is_active && <span className="text-xs text-red-600">(деактивирован)</span>}
@@ -152,7 +152,7 @@ export default function AdminTemplatesPage() {
                 {t.subject && <p className="mt-0.5 text-xs text-graphite-900/60">Тема: {t.subject}</p>}
                 <p className="mt-2 whitespace-pre-wrap text-xs font-mono text-graphite-900/70 line-clamp-2">{t.body}</p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-3 sm:gap-2">
                 <button onClick={() => startEdit(t)} className="text-xs text-orange hover:underline">✏ Изменить</button>
                 {t.is_active && (
                   <button onClick={() => remove(t.id)} className="text-xs text-red-600 hover:underline">🗑 Удалить</button>
@@ -170,8 +170,8 @@ export default function AdminTemplatesPage() {
 
       {/* Редактор */}
       {editing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-graphite-950/70 p-6" onClick={() => setEditing(null)}>
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-graphite-950/70 p-0 sm:items-center sm:p-6" onClick={() => setEditing(null)}>
+          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-t-2xl bg-white p-4 shadow-xl sm:rounded-2xl sm:p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-line pb-3">
               <h2 className="text-xl font-bold text-graphite-900">
                 {editing.id ? "Редактировать шаблон" : "Новый шаблон"}
@@ -181,7 +181,7 @@ export default function AdminTemplatesPage() {
 
             <div className="mt-4 grid gap-4 md:grid-cols-[1fr_220px]">
               <div className="grid gap-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <label className="text-xs uppercase tracking-wider text-graphite-900/40">Канал</label>
                     <select
@@ -236,7 +236,7 @@ export default function AdminTemplatesPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <label className="text-xs uppercase tracking-wider text-graphite-900/40">Порядок</label>
                     <input
@@ -281,8 +281,8 @@ export default function AdminTemplatesPage() {
               </aside>
             </div>
 
-            <div className="mt-5 flex justify-end gap-2 border-t border-line pt-4">
-              <button onClick={() => setEditing(null)} className="text-sm text-graphite-900/60 hover:text-graphite-900">
+            <div className="mt-5 flex flex-col-reverse gap-2 border-t border-line pt-4 sm:flex-row sm:justify-end">
+              <button onClick={() => setEditing(null)} className="rounded-full border border-line px-5 py-2 text-sm text-graphite-900/60 hover:text-graphite-900 sm:border-0">
                 Отмена
               </button>
               <button

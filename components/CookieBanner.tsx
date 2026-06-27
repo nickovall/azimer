@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 const STORAGE_KEY = "azimer_cookie_ack";
+const HIDDEN_PREFIXES = ["/console-x9p4m2"];
 
 /**
  * Информационный баннер о cookie и веб-аналитике (152-ФЗ).
@@ -11,15 +13,18 @@ const STORAGE_KEY = "azimer_cookie_ack";
  * с гранулярным согласием. Закрывается кнопкой, выбор хранится в localStorage.
  */
 export default function CookieBanner() {
+  const pathname = usePathname();
   const [visible, setVisible] = useState(false);
+  const hidden = HIDDEN_PREFIXES.some((prefix) => pathname?.startsWith(prefix));
 
   useEffect(() => {
+    if (hidden) return;
     try {
       if (!localStorage.getItem(STORAGE_KEY)) setVisible(true);
     } catch {
       // localStorage недоступен (приватный режим) — баннер просто не показываем
     }
-  }, []);
+  }, [hidden]);
 
   const accept = () => {
     try {
@@ -30,7 +35,7 @@ export default function CookieBanner() {
     setVisible(false);
   };
 
-  if (!visible) return null;
+  if (hidden || !visible) return null;
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-[60] px-4 pb-4 lg:px-6 lg:pb-6">

@@ -76,11 +76,11 @@ export default function AdminComposePage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-orange">Новое сообщение</p>
         <Link href="/console-x9p4m2/" className="text-xs text-orange hover:underline">← На дашборд</Link>
       </div>
-      <h1 className="mt-1 text-3xl font-bold text-graphite-900">✉️ Написать кому угодно</h1>
+      <h1 className="mt-1 text-2xl font-bold text-graphite-900 sm:text-3xl">✉️ Написать кому угодно</h1>
       <p className="mt-1 text-sm text-graphite-900/60">
         Email уходит с <span className="font-mono">info@azimer.ru</span> с фирменной обёрткой и логотипом.
         SMS — через smsc.ru (если пополнен баланс).
@@ -202,11 +202,11 @@ export default function AdminComposePage() {
           </div>
         )}
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
           <button
             onClick={resetForm}
             disabled={sending}
-            className="text-xs text-graphite-900/60 hover:text-graphite-900"
+            className="rounded-full border border-line px-5 py-2.5 text-sm text-graphite-900/60 hover:text-graphite-900 sm:border-0 sm:px-0 sm:py-0 sm:text-xs"
           >
             Очистить форму
           </button>

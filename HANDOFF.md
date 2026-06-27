@@ -29,6 +29,95 @@ It intentionally contains no secret values.
   testimonials, or `Testimonials` sections on the public site unless the owner
   explicitly reverses this decision later.
 
+## Work Handoff As Of 2026-06-27 (Mobile Admin Pass)
+
+### TL;DR
+
+Admin routes now have a mobile bottom nav and mobile-safe layouts for core
+operator screens. Catalog editing uses cards on phones instead of a wide table.
+Cookie banner and public footer are hidden on admin routes because they blocked
+or polluted the mobile admin experience.
+
+### Architecture
+
+```text
+app/layout.tsx
+  +-- Header / Footer / MobileStickyCta / CookieBanner
+  |
+  +-- app/console-x9p4m2/layout.tsx
+        |
+        v
+      components/admin/AdminShell.tsx
+        +-- desktop Sidebar
+        +-- mobile fixed bottom admin nav
+        +-- useAdmin() token context
+```
+
+### Current State
+
+- [done] `AdminShell` has mobile bottom navigation with active-state handling
+  for nested admin routes.
+- [done] Catalog, leads, lead detail, KP editor, templates, and compose screens
+  have mobile stacking, full-width critical actions, and safer text wrapping.
+- [done] Catalog page renders mobile cards while keeping the desktop table.
+- [done] `CookieBanner` does not render under `/console-x9p4m2`.
+- [done] Public `Footer` is hidden under `/console-x9p4m2` via
+  `HideOnAdminRoutes`.
+- [verified] Mobile smoke ran at 390x844 with mocked admin-api responses:
+  dashboard, leads, catalog, templates, compose, lead detail, and KP editor all
+  had `scrollWidth == viewport` and visible bottom admin nav.
+
+### Key Decisions
+
+- Chose a fixed bottom admin nav on mobile because the desktop sidebar has no
+  useful mobile equivalent and the operator needs one-tap access to the five
+  repeated workflows.
+- Kept desktop tables where they work and added mobile-only card views only
+  where tables were the actual problem, to avoid rewriting stable desktop UX.
+- Mocked `admin-api` in browser smoke instead of using real credentials or prod
+  API writes; this verifies responsive rendering without touching live data.
+
+### Open Questions
+
+- Public `Header` still comes from root layout on admin routes. It is accounted
+  for by admin spacing, but a cleaner route-specific admin chrome can still be
+  considered later.
+
+### Next Concrete Steps
+
+1. Test on a real phone with real admin credentials and real lead data.
+2. Decide whether admin routes should also hide public `Header` and use an
+   admin-only top bar.
+3. If keeping public header, keep admin top spacing aligned with its height.
+
+### File Index
+
+- `components/admin/AdminShell.tsx`
+- `components/CookieBanner.tsx`
+- `components/HideOnAdminRoutes.tsx`
+- `app/console-x9p4m2/catalog/page.tsx`
+- `app/console-x9p4m2/leads/page.tsx`
+- `app/console-x9p4m2/leads/view/page.tsx`
+- `app/console-x9p4m2/leads/kp/page.tsx`
+- `app/console-x9p4m2/templates/page.tsx`
+- `app/console-x9p4m2/compose/page.tsx`
+
+### Credentials & Access
+
+- Browser smoke did not use real admin credentials.
+- Runtime env names involved: `NEXT_PUBLIC_ADMIN_GATE_KEY`,
+  `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+
+### Glossary
+
+- Mobile admin nav: fixed bottom navigation rendered by `AdminShell` for
+  `/console-x9p4m2/*` on small screens.
+- Admin gate: public URL/localStorage gate controlled by
+  `NEXT_PUBLIC_ADMIN_GATE_KEY`; it is not the real admin session.
+- Mocked admin-api smoke: Playwright run with route interception returning local
+  fixture JSON for admin API calls.
+
 ## Work Handoff As Of 2026-06-10 (Wave 1 deployed)
 
 ### TL;DR

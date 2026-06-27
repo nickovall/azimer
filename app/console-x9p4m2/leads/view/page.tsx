@@ -428,18 +428,18 @@ function AdminLeadViewPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <Link href="/console-x9p4m2/leads/" className="text-xs text-orange hover:underline">
           ← К списку
         </Link>
-        <span className="font-mono text-xs text-graphite-900/30">{lead.id}</span>
+        <span className="min-w-0 truncate font-mono text-xs text-graphite-900/30">{lead.id}</span>
       </div>
 
       <div className="mt-3 border-b border-line pb-5">
         <p className="font-mono text-xs uppercase tracking-[0.2em] text-orange">
           {SOURCE_LABEL[lead.source]}
         </p>
-        <h1 className="mt-1 text-3xl font-bold text-graphite-900">{lead.name}</h1>
+        <h1 className="mt-1 break-words text-2xl font-bold text-graphite-900 sm:text-3xl">{lead.name}</h1>
         <p className="mt-1 text-sm text-graphite-900/60">
           Поступила: <span className="font-mono">{fmtDateTime(lead.created_at)}</span>
           {lead.status_updated_at && lead.status_updated_at !== lead.created_at && (
@@ -460,12 +460,12 @@ function AdminLeadViewPage() {
               {NEXT_STEP_HINT[currentStatus]}
             </h2>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
             {nextStatus && nextStepLabel && (
               <button
                 onClick={() => changeStatus(nextStatus)}
                 disabled={savingStatus !== null}
-                className="rounded-full bg-orange px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-bright disabled:opacity-50"
+                className="w-full rounded-full bg-orange px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-bright disabled:opacity-50 sm:w-auto"
               >
                 {savingStatus === nextStatus ? "..." : nextStepLabel}
               </button>
@@ -473,7 +473,7 @@ function AdminLeadViewPage() {
             {currentStatus !== "commission_paid" && currentStatus !== "lost" && (
               <button
                 onClick={() => setCloseModalOpen(true)}
-                className="rounded-full border-2 border-graphite-950 bg-white px-5 py-2 text-sm font-semibold text-graphite-900 transition-colors hover:bg-graphite-950 hover:text-light"
+                className="w-full rounded-full border-2 border-graphite-950 bg-white px-5 py-2 text-sm font-semibold text-graphite-900 transition-colors hover:bg-graphite-950 hover:text-light sm:w-auto"
               >
                 Закрыть сделку
               </button>
@@ -554,17 +554,17 @@ function AdminLeadViewPage() {
               Файлы хранятся в Supabase под Lead ID. Перетащи или нажми «+ Файл» на нужную папку.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
             <Link
               href={`/console-x9p4m2/leads/kp/?id=${lead.id}`}
-              className="rounded-full bg-graphite-950 px-4 py-2 text-xs font-semibold text-light hover:bg-orange"
+              className="flex-1 rounded-full bg-graphite-950 px-4 py-2 text-center text-xs font-semibold text-light hover:bg-orange sm:flex-none"
             >
               🧮 Редактор КП
             </Link>
             <button
               onClick={sendToAccountant}
               disabled={savingStatus === "sent_to_accountant"}
-              className="rounded-full bg-orange px-4 py-2 text-xs font-semibold text-white hover:bg-orange-bright disabled:opacity-50"
+              className="flex-1 rounded-full bg-orange px-4 py-2 text-xs font-semibold text-white hover:bg-orange-bright disabled:opacity-50 sm:flex-none"
             >
               {savingStatus === "sent_to_accountant" ? "..." : "📤 Передать бухгалтеру"}
             </button>
@@ -732,7 +732,7 @@ function AdminLeadViewPage() {
 
       {/* Отправка SMS / Email клиенту */}
       <section className="mt-6 rounded-2xl border border-line bg-white p-5">
-        <header className="flex items-center justify-between">
+        <header className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-900/60">
             ✉️ Отправить сообщение клиенту
           </h2>
@@ -791,7 +791,7 @@ function AdminLeadViewPage() {
             )}
 
             <div className="mt-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <label className="text-xs uppercase tracking-wider text-graphite-900/40">Тело сообщения</label>
                 {!editingBody && (
                   <button onClick={() => setEditingBody(true)} className="text-xs text-orange hover:underline">
@@ -824,13 +824,13 @@ function AdminLeadViewPage() {
               )}
             </div>
 
-            <div className="mt-4 flex items-center justify-between">
-              <div>
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-h-5">
                 {sendResult && (
                   <p className={`text-sm ${sendResult.ok ? "text-green-700" : "text-red-700"}`}>{sendResult.text}</p>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {editingBody && (
                   <button
                     onClick={() => { setEditingBody(false); setBodyDraft(selectedTpl?.body ?? ""); setSubjectDraft(selectedTpl?.subject ?? ""); }}
@@ -842,7 +842,7 @@ function AdminLeadViewPage() {
                 <button
                   onClick={handleSend}
                   disabled={!canSend}
-                  className="rounded-full bg-orange px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-bright disabled:cursor-not-allowed disabled:opacity-40"
+                  className="w-full rounded-full bg-orange px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-bright disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
                 >
                   {sending ? "Отправка…" : `🚀 Отправить ${sendChannel === "sms" ? "SMS" : "Email"}`}
                 </button>
@@ -857,10 +857,10 @@ function AdminLeadViewPage() {
             <p className="text-xs uppercase tracking-wider text-graphite-900/40">История ({messages.length})</p>
             <ul className="mt-2 space-y-1.5">
               {messages.map((m) => (
-                <li key={m.id} className="flex items-center gap-3 text-xs">
+                <li key={m.id} className="flex flex-wrap items-center gap-2 text-xs sm:flex-nowrap sm:gap-3">
                   <span className="font-mono text-graphite-900/50">{fmtDateTime(m.sent_at)}</span>
                   <span className="rounded bg-light px-2 py-0.5 text-[10px] uppercase tracking-wider">{m.channel}</span>
-                  <span className="text-graphite-900/70 truncate flex-1">
+                  <span className="min-w-0 flex-1 truncate text-graphite-900/70">
                     {m.template_slug ?? "—"} · {m.body_rendered.slice(0, 60)}{m.body_rendered.length > 60 ? "…" : ""}
                   </span>
                   <span className={
@@ -1109,7 +1109,7 @@ function AdminLeadViewPage() {
           <button
             onClick={handleDelete}
             disabled={deleting}
-            className="shrink-0 rounded-full border border-red-300 bg-white px-5 py-2.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-600 hover:text-white disabled:opacity-50"
+            className="w-full shrink-0 rounded-full border border-red-300 bg-white px-5 py-2.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-600 hover:text-white disabled:opacity-50 sm:w-auto"
           >
             {deleting ? "Удаляем…" : "🗑 Удалить безвозвратно"}
           </button>
@@ -1317,7 +1317,7 @@ function CloseDealModal({
           {err && <p className="text-sm text-red-700">{err}</p>}
         </div>
 
-        <footer className="flex justify-end gap-2 border-t border-line bg-light/30 px-5 py-3">
+        <footer className="flex flex-col-reverse gap-2 border-t border-line bg-light/30 px-5 py-3 sm:flex-row sm:justify-end">
           <button
             onClick={onClose}
             disabled={closing}
@@ -1342,7 +1342,7 @@ function CloseDealModal({
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[140px_1fr] gap-3 items-baseline">
+    <div className="grid gap-1 sm:grid-cols-[140px_1fr] sm:items-baseline sm:gap-3">
       <dt className="text-xs uppercase tracking-wider text-graphite-900/40">{label}</dt>
       <dd className="text-sm text-graphite-900 break-words">{children}</dd>
     </div>

@@ -27,12 +27,24 @@ export function useAdmin() {
 // trailingSlash добавлен явно, чтобы избежать 301-redirect и hard refresh,
 // который терял бы SPA-state AdminShell (gated/authed) и ломал админку.
 const NAV = [
-  { href: ADMIN_ROOT + "/",           label: "Дашборд",   icon: "📊" },
-  { href: ADMIN_ROOT + "/leads/",     label: "Заявки",    icon: "📩" },
-  { href: ADMIN_ROOT + "/compose/",   label: "Написать",  icon: "✏️" },
-  { href: ADMIN_ROOT + "/catalog/",   label: "Каталог",   icon: "🗂" },
-  { href: ADMIN_ROOT + "/templates/", label: "Шаблоны",   icon: "✉️" },
+  { href: ADMIN_ROOT + "/",           label: "Дашборд",   mobileLabel: "Даш",    icon: "📊" },
+  { href: ADMIN_ROOT + "/leads/",     label: "Заявки",    mobileLabel: "Заявки", icon: "📩" },
+  { href: ADMIN_ROOT + "/compose/",   label: "Написать",  mobileLabel: "Письмо", icon: "✏️" },
+  { href: ADMIN_ROOT + "/catalog/",   label: "Каталог",   mobileLabel: "Цены",   icon: "🗂" },
+  { href: ADMIN_ROOT + "/templates/", label: "Шаблоны",   mobileLabel: "Шабл.",  icon: "✉️" },
 ];
+
+function normalizePath(pathname: string): string {
+  const clean = pathname.replace(/\/+$/, "");
+  return clean || "/";
+}
+
+function isActiveAdminPath(pathname: string, href: string): boolean {
+  const current = normalizePath(pathname);
+  const target = normalizePath(href);
+  if (target === ADMIN_ROOT) return current === ADMIN_ROOT;
+  return current === target || current.startsWith(`${target}/`);
+}
 
 export default function AdminShell({ children }: { children: ReactNode }) {
   // Gate: ключ из URL или localStorage (trust-device, переживает закрытие вкладки).
@@ -172,11 +184,12 @@ export default function AdminShell({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider value={{ token, logout }}>
-      <div className="bg-light pb-24 pt-24">
-        <div className="mx-auto flex w-full max-w-[1400px] gap-6 px-6">
+      <div className="bg-light pb-32 pt-24 md:pb-24">
+        <div className="mx-auto flex w-full max-w-[1400px] gap-6 px-3 sm:px-4 md:px-6">
           <Sidebar />
           <main className="min-w-0 flex-1">{children}</main>
         </div>
+        <MobileAdminNav />
       </div>
     </Ctx.Provider>
   );
@@ -209,9 +222,7 @@ function Sidebar() {
       </div>
       <nav className="mt-3 flex flex-col gap-1">
         {NAV.map((item) => {
-          const active = item.href === "/admin"
-            ? pathname === "/admin"
-            : pathname.startsWith(item.href);
+          const active = isActiveAdminPath(pathname, item.href);
           return (
             <Link
               key={item.href}
@@ -235,5 +246,46 @@ function Sidebar() {
         ⏏ Выйти
       </button>
     </aside>
+  );
+}
+
+function MobileAdminNav() {
+  const pathname = usePathname();
+  const { logout } = useAdmin();
+
+  return (
+    <nav
+      className="fixed inset-x-0 bottom-0 z-[55] border-t border-line bg-white/95 px-2 pb-2 pt-2 shadow-[0_-8px_24px_-16px_rgba(0,0,0,0.35)] backdrop-blur md:hidden"
+      style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.5rem)" }}
+      aria-label="Навигация админки"
+    >
+      <div className="mx-auto flex max-w-md items-stretch gap-1">
+        {NAV.map((item) => {
+          const active = isActiveAdminPath(pathname, item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex min-w-0 flex-1 flex-col items-center justify-center rounded-xl px-1.5 py-2 text-[10px] font-medium leading-none transition-colors ${
+                active
+                  ? "bg-graphite-950 text-light"
+                  : "text-graphite-900/60 active:bg-light"
+              }`}
+            >
+              <span className="text-base leading-none">{item.icon}</span>
+              <span className="mt-1 truncate">{item.mobileLabel}</span>
+            </Link>
+          );
+        })}
+        <button
+          type="button"
+          onClick={logout}
+          className="flex min-w-0 flex-1 flex-col items-center justify-center rounded-xl px-1.5 py-2 text-[10px] font-medium leading-none text-graphite-900/60 active:bg-light"
+        >
+          <span className="text-base leading-none">⏏</span>
+          <span className="mt-1 truncate">Выйти</span>
+        </button>
+      </div>
+    </nav>
   );
 }

@@ -117,7 +117,7 @@ export default function AdminCatalogPage() {
 
   return (
     <div>
-      <div className="flex items-end justify-between border-b border-line pb-5">
+      <div className="flex flex-col gap-4 border-b border-line pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-orange">Каталог</p>
           <h1 className="mt-1 text-3xl font-bold text-graphite-900">Цены</h1>
@@ -128,7 +128,7 @@ export default function AdminCatalogPage() {
         <button
           onClick={triggerRebuild}
           disabled={rebuilding}
-          className="rounded-full bg-graphite-950 px-5 py-2.5 text-sm font-semibold text-light transition-colors hover:bg-orange disabled:opacity-50"
+          className="w-full rounded-full bg-graphite-950 px-5 py-2.5 text-sm font-semibold text-light transition-colors hover:bg-orange disabled:opacity-50 sm:w-auto"
           title="Запустить GitLab CI: сгенерировать новый snapshot цен и задеплоить сайт"
         >
           {rebuilding ? "Запускаем..." : "🚀 Опубликовать на сайте"}
@@ -154,7 +154,7 @@ export default function AdminCatalogPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="🔍 Поиск по названию, ключу, поставщику..."
-          className="w-72 rounded-full border border-line bg-white px-5 py-2 text-sm focus:border-orange focus:outline-none"
+          className="w-full rounded-full border border-line bg-white px-5 py-2 text-sm focus:border-orange focus:outline-none sm:w-72"
         />
         <div className="flex flex-wrap gap-2">
           <CatTab id="all" active={activeCat} onClick={setActiveCat} label="Все" count={items.length} />
@@ -173,7 +173,100 @@ export default function AdminCatalogPage() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-2xl border border-line bg-white">
+      <div className="grid gap-3 md:hidden">
+        {filtered.map((it) => {
+          const editing = editingKey === it.key;
+          const saving = savingKey === it.key;
+          const flashed = savedFlash === it.key;
+          return (
+            <article
+              key={`${it.category}_${it.key}`}
+              className={`rounded-2xl border border-line bg-white p-4 ${flashed ? "bg-green-50" : ""}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-medium leading-snug text-graphite-900">{it.label}</p>
+                  <p className="mt-1 font-mono text-[11px] text-graphite-900/45">
+                    {it.category} · {it.key}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full bg-light px-2 py-1 text-[11px] text-graphite-900/60">
+                  {it.unit}
+                </span>
+              </div>
+
+              {editing ? (
+                <div className="mt-4 grid gap-3">
+                  <label className="grid gap-1 text-xs uppercase tracking-wider text-graphite-900/40">
+                    Цена
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editPrice}
+                      onChange={(e) => setEditPrice(e.target.value)}
+                      autoFocus
+                      className="rounded-xl border border-orange bg-white px-3 py-2 text-base normal-case tracking-normal text-graphite-900"
+                    />
+                  </label>
+                  <label className="grid gap-1 text-xs uppercase tracking-wider text-graphite-900/40">
+                    Поставщик
+                    <input
+                      value={editVendor}
+                      onChange={(e) => setEditVendor(e.target.value)}
+                      placeholder="Имя поставщика"
+                      className="rounded-xl border border-line bg-white px-3 py-2 text-base normal-case tracking-normal text-graphite-900"
+                    />
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => saveItem(it)}
+                      disabled={saving}
+                      className="flex-1 rounded-full bg-orange px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {saving ? "..." : "Сохранить"}
+                    </button>
+                    <button
+                      onClick={() => { setEditingKey(null); setError(null); }}
+                      className="rounded-full border border-line px-4 py-2.5 text-sm text-graphite-900/70"
+                    >
+                      Отмена
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 flex items-end justify-between gap-3 border-t border-line/60 pt-3">
+                  <div>
+                    <p className="font-mono text-xl font-semibold tabular-nums text-graphite-900">
+                      {it.price.toLocaleString("ru-RU")}
+                    </p>
+                    <p className="mt-1 text-xs text-graphite-900/50">
+                      {it.vendor ?? "Поставщик не указан"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setEditingKey(it.key);
+                      setEditPrice(String(it.price));
+                      setEditVendor(it.vendor ?? "");
+                      setError(null);
+                    }}
+                    className="shrink-0 rounded-full border border-line px-4 py-2 text-xs font-medium text-orange"
+                  >
+                    ✏ Изменить
+                  </button>
+                </div>
+              )}
+            </article>
+          );
+        })}
+        {filtered.length === 0 && (
+          <p className="rounded-2xl border border-line bg-white p-8 text-center text-sm text-graphite-900/40">
+            Ничего не найдено
+          </p>
+        )}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-2xl border border-line bg-white md:block">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line bg-light/50 text-xs uppercase tracking-wider text-graphite-900/60">
