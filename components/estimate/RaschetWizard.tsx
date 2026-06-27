@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   objectTypes,
@@ -18,6 +17,7 @@ import {
   type WizardState,
 } from "@/lib/pricing";
 import { TextField, ChoiceField } from "../ui/Field";
+import ConsentCheckbox from "../ui/ConsentCheckbox";
 import { clientTypes } from "@/lib/content";
 import { submitLead, LeadValidationError } from "@/lib/supabase";
 import { useAntibot, Honeypot } from "../Antibot";
@@ -198,6 +198,7 @@ export default function RaschetWizard() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [consent, setConsent] = useState(false);
   const { honeypot, setHoneypot, guard } = useAntibot();
 
   const steps: StepId[] =
@@ -521,6 +522,7 @@ export default function RaschetWizard() {
                     }
                   />
                 </div>
+                <ConsentCheckbox checked={consent} onChange={setConsent} />
                 {submitError && (
                   <p className="mt-4 text-sm text-red-600">{submitError}</p>
                 )}
@@ -545,9 +547,9 @@ export default function RaschetWizard() {
         {current === "result" ? (
           <button
             type="button"
-            disabled={!contact.name || !contact.phone || submitting}
+            disabled={!contact.name || !contact.phone || !consent || submitting}
             onClick={async () => {
-              if (submitting) return;
+              if (submitting || !consent) return;
               setSubmitting(true);
               setSubmitError(null);
               try {

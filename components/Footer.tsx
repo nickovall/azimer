@@ -92,13 +92,21 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-2 border-t border-white/10 py-7 text-xs text-light/40 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-t border-white/10 py-7 text-xs text-light/40 sm:flex-row sm:items-center sm:justify-between">
           <span>
             © {new Date().getFullYear()} {company.legalName}
           </span>
-          <span className="font-mono uppercase tracking-[0.15em]">
-            Каркасные конструкции · ЛСТК · Модульные здания
-          </span>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <Link
+              href="/privacy"
+              className="transition-colors hover:text-orange"
+            >
+              Политика конфиденциальности
+            </Link>
+            <span className="font-mono uppercase tracking-[0.15em]">
+              Каркасные конструкции · ЛСТК · Модульные здания
+            </span>
+          </div>
         </div>
       </Container>
 

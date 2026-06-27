@@ -1,9 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
-import Link from "next/link";
 import { motion } from "framer-motion";
 import { TextField, TextArea, FieldLabel, ChoiceField } from "./ui/Field";
+import ConsentCheckbox from "./ui/ConsentCheckbox";
 import { clientTypes } from "@/lib/content";
 import { submitLead, uploadLeadFile, LeadValidationError } from "@/lib/supabase";
 import { useAntibot, Honeypot } from "./Antibot";
@@ -17,6 +17,7 @@ export default function ProjectForm() {
   const [sent, setSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [consent, setConsent] = useState(false);
   const [form, setForm] = useState({
     clientType: "",
     name: "",
@@ -73,7 +74,7 @@ export default function ProjectForm() {
     <form
       onSubmit={async (e) => {
         e.preventDefault();
-        if (submitting) return;
+        if (submitting || !consent) return;
         setSubmitting(true);
         setError(null);
         try {
@@ -219,10 +220,12 @@ export default function ProjectForm() {
 
       <Honeypot value={honeypot} onChange={setHoneypot} />
 
+      <ConsentCheckbox checked={consent} onChange={setConsent} />
+
       <button
         type="submit"
-        disabled={submitting}
-        className="mt-6 inline-flex w-full items-center justify-center gap-2.5 rounded-full bg-orange px-7 py-4 text-sm font-semibold text-white transition-all duration-300 hover:bg-orange-bright hover:-translate-y-0.5 sm:w-auto"
+        disabled={submitting || !consent}
+        className="mt-6 inline-flex w-full items-center justify-center gap-2.5 rounded-full bg-orange px-7 py-4 text-sm font-semibold text-white transition-all duration-300 hover:bg-orange-bright hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 sm:w-auto"
       >
         {submitting ? "Отправляем…" : "Отправить проект"}
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -237,14 +240,6 @@ export default function ProjectForm() {
       </button>
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
-
-      <p className="mt-4 text-xs leading-relaxed text-graphite-900/45">
-        Нажимая кнопку, вы соглашаетесь с{" "}
-        <Link href="/privacy" className="text-orange hover:underline">
-          политикой конфиденциальности
-        </Link>
-        .
-      </p>
     </form>
   );
 }

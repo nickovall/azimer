@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { motion } from "framer-motion";
 import { TextField, TextArea } from "./ui/Field";
+import ConsentCheckbox from "./ui/ConsentCheckbox";
 import { submitLead, LeadValidationError } from "@/lib/supabase";
 import { useAntibot, Honeypot } from "./Antibot";
 
@@ -11,6 +11,7 @@ export default function PartnerForm() {
   const [sent, setSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [consent, setConsent] = useState(false);
   const [form, setForm] = useState({
     name: "",
     company: "",
@@ -60,7 +61,7 @@ export default function PartnerForm() {
     <form
       onSubmit={async (e) => {
         e.preventDefault();
-        if (submitting) return;
+        if (submitting || !consent) return;
         setSubmitting(true);
         setError(null);
         try {
@@ -136,10 +137,12 @@ export default function PartnerForm() {
 
       <Honeypot value={honeypot} onChange={setHoneypot} />
 
+      <ConsentCheckbox checked={consent} onChange={setConsent} />
+
       <button
         type="submit"
-        disabled={submitting}
-        className="mt-6 inline-flex w-full items-center justify-center gap-2.5 rounded-full bg-orange px-7 py-4 text-sm font-semibold text-white transition-all duration-300 hover:bg-orange-bright hover:-translate-y-0.5 sm:w-auto"
+        disabled={submitting || !consent}
+        className="mt-6 inline-flex w-full items-center justify-center gap-2.5 rounded-full bg-orange px-7 py-4 text-sm font-semibold text-white transition-all duration-300 hover:bg-orange-bright hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 sm:w-auto"
       >
         {submitting ? "Отправляем…" : "Отправить заявку"}
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -154,14 +157,6 @@ export default function PartnerForm() {
       </button>
 
       {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
-
-      <p className="mt-4 text-xs leading-relaxed text-graphite-900/45">
-        Нажимая кнопку, вы соглашаетесь с{" "}
-        <Link href="/privacy" className="text-orange hover:underline">
-          политикой конфиденциальности
-        </Link>
-        .
-      </p>
     </form>
   );
 }

@@ -32,7 +32,7 @@ export default function Analytics() {
             clickmap:true,
             trackLinks:true,
             accurateTrackBounce:true,
-            webvisor:true
+            webvisor:false
           });
         `}
       </Script>

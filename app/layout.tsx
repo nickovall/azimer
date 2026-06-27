@@ -6,6 +6,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import MobileStickyCta from "@/components/MobileStickyCta";
 import Analytics from "@/components/Analytics";
+import CookieBanner from "@/components/CookieBanner";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -117,6 +118,7 @@ export default function RootLayout({
           <Footer />
         </SmoothScroll>
         <MobileStickyCta />
+        <CookieBanner />
       </body>
     </html>
   );
