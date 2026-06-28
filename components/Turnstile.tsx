@@ -6,7 +6,8 @@ import { useEffect, useRef } from "react";
 // `submit-lead`, которая проверяет его серверно (siteverify) перед вставкой лида.
 // Без site key (локалка без env) компонент ничего не рендерит и не мешает форме.
 
-const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
+// Site key публичный — намеренно хардкожен, env var с Turbopack ненадёжен в static export.
+const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "0x4AAAAAADrebGJlbPB3bOwy";
 const SCRIPT_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 
 declare global {
