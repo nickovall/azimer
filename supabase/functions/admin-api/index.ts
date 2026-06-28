@@ -432,7 +432,7 @@ Deno.serve(async (req) => {
         payment_status, commission_eligible, commission_rate,
         commission_notes, project_folder_url, name, phone, email,
         client_type, object_type, company, message, estimate, utm_source,
-        utm_medium, utm_campaign, landing_page
+        utm_medium, utm_campaign, landing_page, follow_up_at, follow_up_note
       `, { count: "exact" })
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
@@ -666,6 +666,62 @@ Deno.serve(async (req) => {
     const { error } = await sb.from("leads").update({ notes }).eq("id", id);
     if (error) return json({ error: error.message }, 500);
     return json({ ok: true });
+  }
+
+  // update_lead_contact — править контактные поля лида после создания
+  // (исправить телефон с опечаткой, добавить email который клиент дал по звонку, и т.д.).
+  // Обновляются только переданные поля. name/phone, если переданы, не должны стать пустыми.
+  if (action === "update_lead_contact") {
+    const { id } = body;
+    if (!id) return json({ error: "Need id" }, 400);
+
+    const patch: Record<string, unknown> = {};
+    if (body.name !== undefined) {
+      const name = nullableString(body.name);
+      if (!name) return json({ error: "Имя не может быть пустым" }, 400);
+      patch.name = name;
+    }
+    if (body.phone !== undefined) {
+      const phone = nullableString(body.phone);
+      if (!phone) return json({ error: "Телефон не может быть пустым" }, 400);
+      patch.phone = phone;
+    }
+    if (body.email !== undefined) patch.email = nullableString(body.email);
+    if (body.company !== undefined) patch.company = nullableString(body.company);
+    if (body.client_type !== undefined) patch.client_type = nullableString(body.client_type);
+    if (body.object_type !== undefined) patch.object_type = nullableString(body.object_type);
+    if (body.direction !== undefined) patch.direction = nullableString(body.direction);
+    if (body.message !== undefined) patch.message = nullableString(body.message);
+
+    if (Object.keys(patch).length === 0) return json({ error: "No fields to update" }, 400);
+
+    const { data, error } = await sb.from("leads").update(patch).eq("id", id).select("*").single();
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true, lead: data });
+  }
+
+  // set_lead_followup — поставить/снять напоминание «перезвонить».
+  // follow_up_at = ISO-строка (напомнить) или null (снять). follow_up_note — о чём.
+  if (action === "set_lead_followup") {
+    const { id } = body;
+    if (!id) return json({ error: "Need id" }, 400);
+
+    const patch: Record<string, unknown> = {};
+    if (body.follow_up_at === null || body.follow_up_at === "") {
+      patch.follow_up_at = null;
+      patch.follow_up_note = null;
+    } else if (typeof body.follow_up_at === "string") {
+      const t = Date.parse(body.follow_up_at);
+      if (!Number.isFinite(t)) return json({ error: "Bad follow_up_at" }, 400);
+      patch.follow_up_at = new Date(t).toISOString();
+      if (body.follow_up_note !== undefined) patch.follow_up_note = nullableString(body.follow_up_note);
+    } else {
+      return json({ error: "follow_up_at must be ISO string or null" }, 400);
+    }
+
+    const { data, error } = await sb.from("leads").update(patch).eq("id", id).select("*").single();
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true, lead: data });
   }
 
   // delete_lead — удалить мусорный/спам-лид безвозвратно.

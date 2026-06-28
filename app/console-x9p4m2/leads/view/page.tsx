@@ -12,6 +12,8 @@ import {
   fmtDateTime,
   fmtRub,
   getLeadDocumentUrl,
+  setLeadFollowUp,
+  updateLeadContact,
   uploadLeadFileDirect,
   CONTRACT_STATUS_LABEL,
   DOCUMENT_TYPE_LABEL,
@@ -22,6 +24,7 @@ import {
   STATUS_COLOR,
   STATUS_LABEL,
   SOURCE_LABEL,
+  type ContactEditInput,
   type DealCommission,
   type LeadDocument,
   type LeadDocumentType,
@@ -87,6 +90,16 @@ function AdminLeadViewPage() {
   const [deleting, setDeleting] = useState(false);
   const [folderDraft, setFolderDraft] = useState("");
   const [savingFolder, setSavingFolder] = useState(false);
+
+  // Правка контактных полей лида
+  const [editingContact, setEditingContact] = useState(false);
+  const [contactDraft, setContactDraft] = useState<ContactEditInput>({});
+  const [savingContact, setSavingContact] = useState(false);
+
+  // Напоминание (follow-up)
+  const [followUpDraft, setFollowUpDraft] = useState("");
+  const [followUpNote, setFollowUpNote] = useState("");
+  const [savingFollowUp, setSavingFollowUp] = useState(false);
   const [docDraft, setDocDraft] = useState({
     doc_type: "kp" as LeadDocumentType,
     title: "",
@@ -237,6 +250,54 @@ function AdminLeadViewPage() {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSavingFolder(false);
+    }
+  }
+
+  function startEditContact() {
+    if (!lead) return;
+    setContactDraft({
+      name: lead.name ?? "",
+      phone: lead.phone ?? "",
+      email: lead.email ?? "",
+      company: lead.company ?? "",
+      client_type: lead.client_type ?? "",
+      object_type: lead.object_type ?? "",
+      direction: lead.direction ?? "",
+    });
+    setEditingContact(true);
+  }
+
+  async function saveContact() {
+    if (!lead) return;
+    if (!contactDraft.name?.trim()) { setError("Имя не может быть пустым"); return; }
+    if (!contactDraft.phone?.trim()) { setError("Телефон не может быть пустым"); return; }
+    setSavingContact(true);
+    setError(null);
+    try {
+      await updateLeadContact(token, lead.id, contactDraft);
+      setEditingContact(false);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingContact(false);
+    }
+  }
+
+  async function saveFollowUp(at: string | null, note?: string | null) {
+    if (!lead) return;
+    setSavingFollowUp(true);
+    setActionResult(null);
+    setError(null);
+    try {
+      await setLeadFollowUp(token, lead.id, at, note);
+      setActionResult(at ? "Напоминание установлено" : "Напоминание снято");
+      setFollowUpDraft("");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingFollowUp(false);
     }
   }
 
@@ -479,6 +540,97 @@ function AdminLeadViewPage() {
               </button>
             )}
           </div>
+        </div>
+      </section>
+
+      {/* Напоминание (follow-up) */}
+      <section className="mt-6 rounded-2xl border border-line bg-white p-5">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-900/60">
+          🔔 Напоминание
+        </h2>
+
+        {lead.follow_up_at && (() => {
+          const fs = followUpStatus(lead.follow_up_at);
+          const tone = fs === "overdue"
+            ? "border-red-300 bg-red-50 text-red-800"
+            : fs === "today"
+            ? "border-amber-300 bg-amber-50 text-amber-900"
+            : "border-line bg-light/40 text-graphite-900";
+          return (
+            <div className={`mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 ${tone}`}>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">
+                  {fs === "overdue" ? "Просрочено: " : fs === "today" ? "Сегодня: " : ""}
+                  <span className="font-mono">{fmtDateTime(lead.follow_up_at)}</span>
+                </p>
+                {lead.follow_up_note && (
+                  <p className="mt-0.5 break-words text-xs opacity-80">{lead.follow_up_note}</p>
+                )}
+              </div>
+              <button
+                onClick={() => saveFollowUp(null)}
+                disabled={savingFollowUp}
+                className="shrink-0 rounded-full border border-current/30 bg-white/70 px-4 py-1.5 text-xs font-medium hover:bg-white disabled:opacity-50"
+              >
+                Снять
+              </button>
+            </div>
+          );
+        })()}
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            onClick={() => saveFollowUp(quickFollowUpISO(1), followUpNote || null)}
+            disabled={savingFollowUp}
+            className="rounded-full border border-line px-4 py-2 text-xs font-medium text-graphite-900/70 hover:border-orange disabled:opacity-50"
+          >
+            Завтра 10:00
+          </button>
+          <button
+            onClick={() => saveFollowUp(quickFollowUpISO(3), followUpNote || null)}
+            disabled={savingFollowUp}
+            className="rounded-full border border-line px-4 py-2 text-xs font-medium text-graphite-900/70 hover:border-orange disabled:opacity-50"
+          >
+            Через 3 дня
+          </button>
+          <button
+            onClick={() => saveFollowUp(quickFollowUpISO(7), followUpNote || null)}
+            disabled={savingFollowUp}
+            className="rounded-full border border-line px-4 py-2 text-xs font-medium text-graphite-900/70 hover:border-orange disabled:opacity-50"
+          >
+            Через неделю
+          </button>
+        </div>
+
+        <div className="mt-3 flex flex-col gap-2 border-t border-line pt-3 sm:flex-row sm:items-end">
+          <label className="grid flex-1 gap-1 text-xs uppercase tracking-wider text-graphite-900/40">
+            Своя дата и время
+            <input
+              type="datetime-local"
+              value={followUpDraft}
+              onChange={(e) => setFollowUpDraft(e.target.value)}
+              className="rounded-xl border border-line bg-light/30 px-3 py-2 text-sm normal-case tracking-normal text-graphite-900 focus:border-orange focus:bg-white focus:outline-none"
+            />
+          </label>
+          <label className="grid flex-1 gap-1 text-xs uppercase tracking-wider text-graphite-900/40">
+            О чём (необязательно)
+            <input
+              value={followUpNote}
+              onChange={(e) => setFollowUpNote(e.target.value)}
+              placeholder="Перезвонить, уточнить размеры…"
+              className="rounded-xl border border-line bg-light/30 px-3 py-2 text-sm normal-case tracking-normal text-graphite-900 focus:border-orange focus:bg-white focus:outline-none"
+            />
+          </label>
+          <button
+            onClick={() => {
+              if (!followUpDraft) { setError("Укажите дату напоминания"); return; }
+              saveFollowUp(new Date(followUpDraft).toISOString(), followUpNote || null);
+            }}
+            disabled={savingFollowUp || !followUpDraft}
+            className="rounded-full bg-graphite-950 px-4 py-2 text-xs font-semibold text-light disabled:opacity-50"
+          >
+            {savingFollowUp ? "..." : "Поставить"}
+          </button>
         </div>
       </section>
 
@@ -879,27 +1031,62 @@ function AdminLeadViewPage() {
       <div className="mt-6 grid gap-6 md:grid-cols-2">
         {/* Контакт */}
         <section className="rounded-2xl border border-line bg-white p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-900/60">
-            Контакт
-          </h2>
-          <dl className="mt-3 space-y-2 text-sm">
-            <Field label="Телефон">
-              <a href={`tel:${lead.phone}`} className="font-mono text-graphite-900 hover:text-orange">
-                {lead.phone}
-              </a>
-            </Field>
-            <Field label="Email">
-              {lead.email ? (
-                <a href={`mailto:${lead.email}`} className="text-graphite-900 hover:text-orange">
-                  {lead.email}
+          <header className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-900/60">
+              Контакт
+            </h2>
+            {!editingContact && (
+              <button onClick={startEditContact} className="text-xs text-orange hover:underline">
+                ✏ Изменить
+              </button>
+            )}
+          </header>
+
+          {editingContact ? (
+            <div className="mt-3 grid gap-3">
+              <ContactInput label="Имя *" value={contactDraft.name ?? ""} onChange={(v) => setContactDraft((d) => ({ ...d, name: v }))} />
+              <ContactInput label="Телефон *" type="tel" value={contactDraft.phone ?? ""} onChange={(v) => setContactDraft((d) => ({ ...d, phone: v }))} />
+              <ContactInput label="Email" type="email" value={contactDraft.email ?? ""} onChange={(v) => setContactDraft((d) => ({ ...d, email: v }))} placeholder="—" />
+              <ContactInput label="Компания" value={contactDraft.company ?? ""} onChange={(v) => setContactDraft((d) => ({ ...d, company: v }))} placeholder="—" />
+              <ContactInput label="Тип клиента" value={contactDraft.client_type ?? ""} onChange={(v) => setContactDraft((d) => ({ ...d, client_type: v }))} placeholder="Частное лицо / Компания" />
+              <ContactInput label="Тип объекта" value={contactDraft.object_type ?? ""} onChange={(v) => setContactDraft((d) => ({ ...d, object_type: v }))} placeholder="—" />
+              <ContactInput label="Направление" value={contactDraft.direction ?? ""} onChange={(v) => setContactDraft((d) => ({ ...d, direction: v }))} placeholder="—" />
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  onClick={() => { setEditingContact(false); setError(null); }}
+                  className="text-xs text-graphite-900/60 hover:text-graphite-900"
+                >
+                  Отмена
+                </button>
+                <button
+                  onClick={saveContact}
+                  disabled={savingContact}
+                  className="rounded-full bg-orange px-4 py-1.5 text-xs font-semibold text-white hover:bg-orange-bright disabled:opacity-50"
+                >
+                  {savingContact ? "..." : "Сохранить"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <dl className="mt-3 space-y-2 text-sm">
+              <Field label="Телефон">
+                <a href={`tel:${lead.phone}`} className="font-mono text-graphite-900 hover:text-orange">
+                  {lead.phone}
                 </a>
-              ) : "—"}
-            </Field>
-            <Field label="Тип клиента">{lead.client_type ?? "—"}</Field>
-            <Field label="Компания">{lead.company ?? "—"}</Field>
-            <Field label="Направление">{lead.direction ?? "—"}</Field>
-            <Field label="Тип объекта">{lead.object_type ?? "—"}</Field>
-          </dl>
+              </Field>
+              <Field label="Email">
+                {lead.email ? (
+                  <a href={`mailto:${lead.email}`} className="text-graphite-900 hover:text-orange">
+                    {lead.email}
+                  </a>
+                ) : "—"}
+              </Field>
+              <Field label="Тип клиента">{lead.client_type ?? "—"}</Field>
+              <Field label="Компания">{lead.company ?? "—"}</Field>
+              <Field label="Направление">{lead.direction ?? "—"}</Field>
+              <Field label="Тип объекта">{lead.object_type ?? "—"}</Field>
+            </dl>
+          )}
         </section>
 
         {/* Источник трафика */}
@@ -1366,6 +1553,51 @@ function MoneyInput({ label, value, onChange }: { label: string; value: string; 
 function formatPercent(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "0%";
   return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(value * 100)}%`;
+}
+
+// ── Напоминания: хелперы дат ──
+// Локальное время браузера (телефон Азамата в Красноярске) → ISO для БД.
+function quickFollowUpISO(daysFromNow: number, hour = 10): string {
+  const d = new Date();
+  d.setDate(d.getDate() + daysFromNow);
+  d.setHours(hour, 0, 0, 0);
+  return d.toISOString();
+}
+
+function followUpStatus(iso: string | null): "overdue" | "today" | "future" | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return null;
+  const now = Date.now();
+  if (t < now) return "overdue";
+  // «сегодня» — до конца текущих суток
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
+  if (t <= endOfDay.getTime()) return "today";
+  return "future";
+}
+
+function ContactInput({
+  label, value, onChange, type = "text", placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  placeholder?: string;
+}) {
+  return (
+    <label className="grid gap-1 text-xs uppercase tracking-wider text-graphite-900/40">
+      {label}
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="rounded-xl border border-line bg-light/30 px-3 py-2 text-sm normal-case tracking-normal text-graphite-900 focus:border-orange focus:bg-white focus:outline-none"
+      />
+    </label>
+  );
 }
 
 function formatVal(v: unknown): string {

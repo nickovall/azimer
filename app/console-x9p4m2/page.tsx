@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAdmin } from "@/components/admin/AdminShell";
 import {
   adminFetch,
+  fmtDateTime,
   fmtRub,
   type LeadRow,
   type LeadStatus,
@@ -46,6 +47,15 @@ export default function AdminDashboardPage() {
   const grouped = useMemo(() => groupByUrgency(leads), [leads]);
   const money = useMemo(() => computeMoney(leads), [leads]);
   const greeting = useMemo(() => getGreeting(), []);
+
+  // Напоминания, которые пора показать: просроченные + на сегодня (до конца суток).
+  const dueFollowUps = useMemo(() => {
+    const end = new Date(); end.setHours(23, 59, 59, 999);
+    const endMs = end.getTime();
+    return leads
+      .filter((l) => l.follow_up_at && new Date(l.follow_up_at).getTime() <= endMs)
+      .sort((a, b) => new Date(a.follow_up_at!).getTime() - new Date(b.follow_up_at!).getTime());
+  }, [leads]);
 
   if (loading) {
     return <p className="py-16 text-center text-graphite-900/40">Загружаем…</p>;
@@ -102,6 +112,44 @@ export default function AdminDashboardPage() {
           isCount
         />
       </div>
+
+      {/* Напоминания на сегодня / просроченные */}
+      {dueFollowUps.length > 0 && (
+        <section className="mt-6 overflow-hidden rounded-2xl border border-orange/40 bg-white">
+          <header className="flex items-center justify-between bg-orange/10 px-5 py-3">
+            <div>
+              <h2 className="text-sm font-bold text-graphite-900">🔔 Напоминания на сегодня</h2>
+              <p className="mt-0.5 text-xs text-graphite-900/60">Запланированные звонки и касания — пора заняться</p>
+            </div>
+            <span className="rounded-full bg-white px-2 py-0.5 font-mono text-xs tabular-nums">{dueFollowUps.length}</span>
+          </header>
+          <ul className="divide-y divide-line/60">
+            {dueFollowUps.map((lead) => {
+              const overdue = new Date(lead.follow_up_at!).getTime() < Date.now();
+              const customer = lead.company || lead.name || "Без имени";
+              return (
+                <li key={lead.id}>
+                  <Link
+                    href={`/console-x9p4m2/leads/view/?id=${lead.id}`}
+                    className="flex items-start gap-3 px-5 py-3 transition-colors hover:bg-light/50"
+                  >
+                    <span className={`mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full ${overdue ? "bg-red-500" : "bg-amber-500"}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-graphite-900">{customer}</p>
+                      <p className="mt-0.5 truncate text-xs text-graphite-900/60">
+                        {lead.follow_up_note || "Напоминание"}
+                      </p>
+                    </div>
+                    <span className={`shrink-0 font-mono text-xs tabular-nums ${overdue ? "font-semibold text-red-700" : "text-graphite-900/60"}`}>
+                      {fmtDateTime(lead.follow_up_at)}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {/* Срочно */}
       <UrgencyBlock

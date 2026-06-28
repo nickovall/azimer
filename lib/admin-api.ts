@@ -117,6 +117,8 @@ export interface LeadRow {
   utm_medium: string | null;
   utm_campaign: string | null;
   landing_page: string | null;
+  follow_up_at: string | null;
+  follow_up_note: string | null;
   doc_summary?: LeadDocSummary;
   commission?: DealCommission | null;
 }
@@ -424,6 +426,51 @@ export async function createLead(token: string, input: NewLeadInput): Promise<{ 
     ...input,
   });
   return { id: r.id, lead_code: r.lead_code };
+}
+
+// ─────────── Правка контактных полей лида ───────────
+
+export interface ContactEditInput {
+  name?: string;
+  phone?: string;
+  email?: string | null;
+  company?: string | null;
+  client_type?: string | null;
+  object_type?: string | null;
+  direction?: string | null;
+  message?: string | null;
+}
+
+// Обновляет только переданные поля. Возвращает обновлённый лид.
+export async function updateLeadContact(
+  token: string,
+  id: string,
+  fields: ContactEditInput,
+): Promise<LeadFull> {
+  const r = await adminFetch<{ ok: true; lead: LeadFull }>(token, {
+    action: "update_lead_contact",
+    id,
+    ...fields,
+  });
+  return r.lead;
+}
+
+// ─────────── Напоминание (follow-up) по лиду ───────────
+
+// at = ISO-строка (поставить) или null (снять). note — о чём напомнить.
+export async function setLeadFollowUp(
+  token: string,
+  id: string,
+  at: string | null,
+  note?: string | null,
+): Promise<LeadFull> {
+  const r = await adminFetch<{ ok: true; lead: LeadFull }>(token, {
+    action: "set_lead_followup",
+    id,
+    follow_up_at: at,
+    follow_up_note: note ?? null,
+  });
+  return r.lead;
 }
 
 export async function deleteLeadDocument(token: string, documentId: string): Promise<void> {

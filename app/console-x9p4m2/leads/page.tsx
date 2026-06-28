@@ -422,11 +422,21 @@ function LeadCard({
         {/* Подвал — мелким */}
         <div className="mt-2 flex items-center justify-between gap-2 border-t border-line/50 pt-2 text-[10px] text-graphite-900/45">
           <span className="font-mono">{code}</span>
-          {days > 0 && (
-            <span className={urgency === "urgent" ? "font-semibold text-red-700" : ""}>
-              {days === 1 ? "вчера" : `${days} дн.`}
-            </span>
-          )}
+          <span className="flex items-center gap-1.5">
+            {lead.follow_up_at && (
+              <span
+                title={`Напоминание: ${new Date(lead.follow_up_at).toLocaleString("ru-RU")}`}
+                className={new Date(lead.follow_up_at).getTime() < Date.now() ? "text-red-600" : "text-amber-600"}
+              >
+                🔔
+              </span>
+            )}
+            {days > 0 && (
+              <span className={urgency === "urgent" ? "font-semibold text-red-700" : ""}>
+                {days === 1 ? "вчера" : `${days} дн.`}
+              </span>
+            )}
+          </span>
         </div>
       </Link>
 
