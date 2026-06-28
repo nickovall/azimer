@@ -201,7 +201,7 @@ export default function RaschetWizard() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
   const { honeypot, setHoneypot, guard } = useAntibot();
-  const [token, setToken] = useState<string | null>(null);
+  const [gateToken, setGateToken] = useState<string | null>(null);
 
   const steps: StepId[] =
     state.frame === "modular"
@@ -288,6 +288,32 @@ export default function RaschetWizard() {
             contact={contact}
           />
         </div>
+      </motion.div>
+    );
+  }
+
+  /* ── Gate: Turnstile перед входом в калькулятор ──────── */
+  if (!gateToken) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: EASE }}
+        className="flex flex-col items-center justify-center gap-6 rounded-2xl border border-line bg-white px-8 py-16 text-center"
+      >
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-orange/10">
+          <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+            <path d="M13 3a10 10 0 100 20A10 10 0 0013 3z" stroke="#ED6629" strokeWidth="2" />
+            <path d="M13 11v2M13 17h.01" stroke="#ED6629" strokeWidth="2.2" strokeLinecap="round" />
+          </svg>
+        </div>
+        <div>
+          <h3 className="text-lg font-bold text-graphite-900">Подтвердите, что вы человек</h3>
+          <p className="mt-1.5 text-sm text-graphite-900/55">
+            Это займёт секунду — после этого калькулятор откроется.
+          </p>
+        </div>
+        <Turnstile onToken={setGateToken} />
       </motion.div>
     );
   }
@@ -525,9 +551,6 @@ export default function RaschetWizard() {
                   />
                 </div>
                 <ConsentCheckbox checked={consent} onChange={setConsent} />
-                <div className="mt-5">
-                  <Turnstile onToken={setToken} />
-                </div>
                 {submitError && (
                   <p className="mt-4 text-sm text-red-600">{submitError}</p>
                 )}
@@ -566,7 +589,7 @@ export default function RaschetWizard() {
                   object_type: state.objectType || undefined,
                   estimate: { state, ...estimate },
                   ...guard(),
-                }, token ?? undefined);
+                }, gateToken ?? undefined);
                 setSubmitted(true);
               } catch (err) {
                 console.error(err);
