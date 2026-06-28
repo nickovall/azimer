@@ -21,6 +21,7 @@ import ConsentCheckbox from "../ui/ConsentCheckbox";
 import { clientTypes } from "@/lib/content";
 import { submitLead, LeadValidationError } from "@/lib/supabase";
 import { useAntibot, Honeypot } from "../Antibot";
+import Turnstile from "../Turnstile";
 import dynamic from "next/dynamic";
 
 const KpDownloadButton = dynamic(() => import("./KpDownloadButton"), {
@@ -200,6 +201,7 @@ export default function RaschetWizard() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
   const { honeypot, setHoneypot, guard } = useAntibot();
+  const [token, setToken] = useState<string | null>(null);
 
   const steps: StepId[] =
     state.frame === "modular"
@@ -523,6 +525,9 @@ export default function RaschetWizard() {
                   />
                 </div>
                 <ConsentCheckbox checked={consent} onChange={setConsent} />
+                <div className="mt-5">
+                  <Turnstile onToken={setToken} />
+                </div>
                 {submitError && (
                   <p className="mt-4 text-sm text-red-600">{submitError}</p>
                 )}
@@ -561,7 +566,7 @@ export default function RaschetWizard() {
                   object_type: state.objectType || undefined,
                   estimate: { state, ...estimate },
                   ...guard(),
-                });
+                }, token ?? undefined);
                 setSubmitted(true);
               } catch (err) {
                 console.error(err);
