@@ -12,13 +12,17 @@ It intentionally contains no secret values.
 3. `docs/audits/2026-06-05-technical-audit.md`
 4. `docs/audits/2026-06-05-design-audit.md`
 5. `docs/prompts/2026-06-05-codex-technical-fix-prompt.md` when doing technical fixes
-6. `B:\MyProjects\Azamat's project automation\HANDOFF.md` only as project map, not as truth
+6. `docs/PROJECT_HANDOFF.md` (committed copy of the project-root map) only as
+   project map, not as truth. Source lives outside the repo at
+   `B:\MyProjects\Azamat's project automation\HANDOFF.md` on Nick's main machine
+   (that folder's `.git` is empty/broken — the in-repo copy is what syncs across
+   machines; keep them in sync manually when editing).
 
 ## Critical Rules
 
 - Do not print or copy secret values from any handoff, env file, CI variable, or
   token file.
-- Treat `B:\MyProjects\Azamat's project automation\HANDOFF.md` as potentially
+- Treat `docs/PROJECT_HANDOFF.md` (and its source `B:\MyProjects\Azamat's project automation\HANDOFF.md`) as potentially
   stale and potentially contaminated with secrets. Verify every claim against
   code, migrations, deployed behavior, and CI.
 - Project-specific audits and execution prompts belong in this repo under
