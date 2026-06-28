@@ -29,6 +29,57 @@ It intentionally contains no secret values.
   testimonials, or `Testimonials` sections on the public site unless the owner
   explicitly reverses this decision later.
 
+## Work Handoff As Of 2026-06-28 (Lead contacts edit + follow-up reminders)
+
+### TL;DR
+
+Managers can now edit a lead's contact fields after creation and set
+follow-up reminders ("call back on date X") that surface on the dashboard.
+Both shipped to prod. Mobile admin pass (2026-06-27) verified and deployed.
+
+### Current State
+
+- [done] DB migration `supabase/migrations/20260628120000_lead_followup.sql`
+  adds `follow_up_at timestamptz` + `follow_up_note text` to `leads` + partial
+  index. Applied to prod via Supabase Management API.
+- [done] `admin-api`: new actions `update_lead_contact` (name/phone/email/
+  company/client_type/object_type/direction; name+phone can't be blanked) and
+  `set_lead_followup` (ISO string or null). `follow_up_at`/`follow_up_note`
+  added to `list_leads` select. Deployed via supabase CLI.
+- [done] Lead card (`leads/view`): editable Contact section + "🔔 Напоминание"
+  block (quick buttons tomorrow/+3d/+week, custom datetime, note, clear;
+  overdue/today highlight).
+- [done] Dashboard: "🔔 Напоминания на сегодня" block (overdue + due today).
+- [done] Kanban card: 🔔 indicator (red if overdue).
+- [done] `lib/admin-api.ts`: `follow_up_at`/`follow_up_note` on LeadRow,
+  `ContactEditInput`, `updateLeadContact()`, `setLeadFollowUp()`.
+- [verified] tsc clean, next build clean (25 pages), site pipeline
+  `#2634675729` success.
+- [todo] Live click-test behind admin password (tsc covers Next app, not the
+  Deno function): open a lead → set reminder → check dashboard; edit an email.
+
+### Key Decisions
+
+- Reminder time is device-local (Azamat's phone is Krasnoyarsk/UTC+7) → stored
+  as ISO; no separate timezone field to keep it simple.
+- Reused the existing `update_lead_*` action pattern rather than a generic field
+  editor, so each action validates its own inputs.
+
+### Deferred (Nick's call)
+
+- Client messaging via Telegram/WhatsApp ("сложности" — postponed).
+- Interaction timeline (instead of overwriting the free-text notes field).
+- Multi-user / lead assignment (for Azamat's incoming sales team).
+
+### File Index
+
+- `supabase/migrations/20260628120000_lead_followup.sql`
+- `supabase/functions/admin-api/index.ts` (actions update_lead_contact, set_lead_followup)
+- `lib/admin-api.ts`
+- `app/console-x9p4m2/leads/view/page.tsx`
+- `app/console-x9p4m2/page.tsx`
+- `app/console-x9p4m2/leads/page.tsx`
+
 ## Work Handoff As Of 2026-06-27 (Mobile Admin Pass)
 
 ### TL;DR
