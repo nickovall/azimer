@@ -33,6 +33,100 @@ It intentionally contains no secret values.
   testimonials, or `Testimonials` sections on the public site unless the owner
   explicitly reverses this decision later.
 
+## Work Handoff As Of 2026-06-29 (Manager Profiles + Audit Trail)
+
+### TL;DR
+
+Admin console now supports owner/manager profiles, lead assignment, and an
+audit trail of manager actions. Legacy `ADMIN_PASSWORD` still works as owner
+fallback. DB migration, `admin-api`, and site UI are deployed to prod.
+
+### Architecture
+
+```text
+AdminShell login
+  |-- legacy ADMIN_PASSWORD -> actor: legacy owner
+  `-- admin_users login/password_hash -> actor: owner|manager
+          |
+          v
+supabase/functions/admin-api
+  |-- writes lead mutations
+  |-- writes admin_audit_events
+  |-- manages admin_users for owner role
+          |
+          v
+app/console-x9p4m2/team
+app/console-x9p4m2/leads/view
+```
+
+### Current State
+
+- DONE: Migration `20260629133554_admin_users_audit.sql` applied to Supabase
+  prod through Management API chunks.
+- DONE: `admin-api` deployed with profile login, owner-only team actions,
+  assignment, and lead audit reads.
+- DONE: UI shipped in commit
+  `f642871 feat(admin): add manager profiles and audit trail`; GitLab pipeline
+  `#2637452132` succeeded.
+- VERIFIED: `npx tsc --noEmit` and `npx next build` clean (32 static routes).
+- TODO: Actual manager accounts are not created yet; create them from
+  `/console-x9p4m2/team/` using the old admin password.
+
+### Key Decisions
+
+- Kept old `ADMIN_PASSWORD` as legacy owner fallback because no real owner
+  profile existed yet and locking production admin out would be worse than
+  leaving the shared password temporarily.
+- Managers currently see all leads. Assignment is for responsibility/audit, not
+  a visibility boundary, because Romar/Nick still need full operational access.
+- Used service-role-only tables with RLS enabled and anon/auth grants revoked,
+  because admin profiles and audit logs must not be exposed through public REST.
+- Added lightweight audit events before replacing notes with a full
+  interaction timeline; `update_lead_notes` still overwrites free text.
+
+### Open Questions
+
+- Which first profiles should exist in prod: owner profile for Nick/Romar,
+  manager profile for the new hire, or both?
+- Should shared `ADMIN_PASSWORD` eventually be rotated or removed after owner
+  profiles are confirmed?
+- Should lead visibility later be restricted by `assigned_manager_id`, or remain
+  global with audit only?
+
+### Next Concrete Steps
+
+1. Login with existing admin password and create profiles in the Team page.
+2. Live-check: profile login -> assign lead -> edit contact/follow-up -> confirm
+   event appears in the lead activity block.
+3. Ask Nick before implementing deeper interaction timeline, visibility
+   restrictions, or Telegram/WhatsApp client messaging.
+
+### File Index
+
+- `supabase/migrations/20260629133554_admin_users_audit.sql`
+- `supabase/functions/admin-api/index.ts`
+- `components/admin/AdminShell.tsx`
+- `app/console-x9p4m2/team/page.tsx`
+- `app/console-x9p4m2/leads/view/page.tsx`
+- `app/console-x9p4m2/leads/page.tsx`
+- `app/console-x9p4m2/page.tsx`
+- `lib/admin-api.ts`
+
+### Credentials & Access
+
+- Supabase Management/deploy token: `B:/dbtest/.tokens/supabase.txt`.
+- GitLab push/pipeline token: `B:/dbtest/.tokens/gitlab.txt`.
+- Edge Function secrets involved, values not in repo:
+  `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`,
+  `MANAGER_PHONE`, `MANAGER_NAME`.
+
+### Glossary
+
+- Actor: current admin identity attached to session/audit events.
+- Legacy owner: admin session created from old shared `ADMIN_PASSWORD`.
+- Assignment: `leads.assigned_manager_id/name`, currently responsibility only.
+- Audit event: append-only row in `admin_audit_events` for manager action trace.
+
 ## Work Handoff As Of 2026-06-29 (SEO Technical Track A)
 
 ### TL;DR

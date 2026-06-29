@@ -1,47 +1,95 @@
-# Session Handoff — 2026-06-29 (follow-up dashboard verification fix)
+# Session Handoff — 2026-06-29 (manager profiles + audit trail)
 
-> Узкий хендофф по сессии Codex. Safe entry — `HANDOFF.md`, полная карта проекта — `docs/PROJECT_HANDOFF.md`.
+> Узкий хендофф по сессии Codex. Safe entry — `HANDOFF.md`,
+> полная карта проекта — `docs/PROJECT_HANDOFF.md`.
 
 ## TL;DR
 
-- Шаг 0 выполнен: прочитаны `AGENTS.md`, `docs/SESSION_HANDOFF_2026-06-28.md`, `HANDOFF.md`, `docs/PROJECT_HANDOFF.md`, плюс обязательный `docs/llm/README.md`.
-- Найден и исправлен UI-баг dashboard: напоминание «Завтра 10:00» ставилось, но не попадало в блок «🔔 Напоминания на сегодня», потому что dashboard показывал только overdue/today.
-- `admin-api` не менялся; миграции не нужны. Локальная и prod mocked browser-проверки сценариев прошли, `npx tsc --noEmit` и `npx next build` чистые. Деплой сайта выполнен.
+- Шаг 0 выполнен: прочитаны `AGENTS.md`,
+  `docs/SESSION_HANDOFF_2026-06-28.md`, `HANDOFF.md`,
+  `docs/PROJECT_HANDOFF.md`, плюс `docs/llm/README.md`.
+- Реализован MVP профилей админки: `owner`/`manager`, вход по логину+паролю,
+  старый `ADMIN_PASSWORD` оставлен как legacy owner fallback.
+- Реализованы назначение ответственного по лиду и audit trail действий
+  менеджеров. Всё задеплоено: БД migration → `admin-api` → GitLab Pages.
 
 ## What Changed
 
-- `app/console-x9p4m2/page.tsx`
-  - Dashboard теперь показывает все активные `follow_up_at` напоминания, отсортированные по времени.
-  - Снятие напоминания по-прежнему убирает лид из блока, потому что `follow_up_at` становится `null`.
+- `supabase/migrations/20260629133554_admin_users_audit.sql`
+  - `public.admin_users`: профили админки, PBKDF2 password hashes,
+    роли `owner|manager`, `is_active`, контакты.
+  - `public.admin_audit_events`: append-only журнал действий.
+  - `public.leads.assigned_manager_id` +
+    `public.leads.assigned_manager_name`.
+  - RLS включён, public grants сняты, доступ через service-role `admin-api`.
+
+- `supabase/functions/admin-api/index.ts`
+  - `login` принимает optional `login`; без логина работает старый пароль.
+  - Session token теперь содержит actor; `verify_session` возвращает actor.
+  - Owner-only actions: `list_admin_users`, `create_admin_user`,
+    `update_admin_user`.
+  - Shared actions: `list_active_managers`, `assign_lead_manager`,
+    `list_lead_events`.
+  - Audit logs добавлены для ключевых действий: status/contact/notes/follow-up,
+    documents, KP estimate, close lead, commission, messages, templates,
+    catalog price updates.
+  - `{{manager_name}}`/`{{manager_phone}}` в шаблонах берутся из профиля
+    вошедшего менеджера; legacy fallback использует env.
+
+- `components/admin/AdminShell.tsx`
+  - Форма входа: optional логин менеджера + пароль.
+  - `useAdmin()` отдаёт `actor`.
+  - Для `owner` появился пункт `Команда`.
+
+- `app/console-x9p4m2/team/page.tsx`
+  - Страница управления профилями: создать менеджера/owner, изменить роль,
+    активность, контакты, заметку, пароль.
+  - Удаления пользователей нет.
+
+- `app/console-x9p4m2/leads/view/page.tsx`
+  - Блок `Ответственный` с назначением менеджера.
+  - Блок `Активность менеджеров` читает `admin_audit_events` по лиду.
+
+- `app/console-x9p4m2/leads/page.tsx`, `app/console-x9p4m2/page.tsx`
+  - Ответственный виден в канбане/таблице/дашборде.
+
+- `lib/admin-api.ts`
+  - Типы `AdminActor`, `AdminUser`, `AdminAuditEvent`.
+  - Helpers для team/assignment/audit actions.
 
 ## Verification
 
-- Mocked browser smoke на изменённом локальном Next dev:
-  1. login через мок `admin-api`;
-  2. карточка лида → «Завтра 10:00»;
-  3. dashboard → блок «🔔 Напоминания на сегодня» виден;
-  4. канбан → колокольчик `🔔` виден;
-  5. карточка → «Снять»;
-  6. dashboard → блок исчез;
-  7. секция «Контакт» → «✏ Изменить» → телефон/email → «Сохранить» → значения обновились.
 - `npx tsc --noEmit` — pass.
-- `npx next build` — pass, 25 static routes.
-- Prod mocked browser smoke на `https://azimer.ru` после деплоя — pass.
+- `npx next build` — pass, 32 static routes.
+- Prod SQL applied through Supabase Management API in 6 idempotent chunks.
+- `supabase functions deploy admin-api --no-verify-jwt --project-ref objgpsjyftdrhafapwvw` — success.
+- Commit `f642871 feat(admin): add manager profiles and audit trail` pushed to:
+  - `gitlab/main`
+  - `origin/main`
+- GitLab pipeline `#2637452132` — success.
 
 ## Not Verified Live
 
-- Живой prod click-test с реальным `admin-api` не выполнен: в локальных файлах нет `ADMIN_PASSWORD` или сохранённого admin session token.
-- Для полного live-теста нужен пароль админки или действующая admin-сессия в браузере.
+- Live click-test with real admin password was not run in this session.
+- Actual manager accounts were not created because desired logins/passwords were
+  not specified. Use old admin password → `Команда` → create profiles.
 
-## Deployment
+## Important Notes
 
-- Commit: `a5a05d3 fix(admin): show scheduled follow-up reminders`.
-- Pushed to `gitlab/main` and `origin/main`.
-- GitLab pipeline `#2635966225` — success.
-- Менялась только Next-админка, поэтому `supabase functions deploy admin-api --no-verify-jwt` не выполнялся и не нужен.
+- Managers currently see all leads. Assignment is attribution/responsibility,
+  not visibility restriction. This was intentional to avoid locking Romar/Nick
+  out of leads while introducing profiles.
+- `update_lead_notes` still overwrites the notes text. The new audit block is a
+  lightweight action timeline, not the full interaction-history feature.
+- Old `ADMIN_PASSWORD` remains active as a legacy owner fallback. After owner
+  profiles are confirmed, rotating or disabling the shared-password workflow can
+  be discussed separately.
 
-## Deferred
+## Next Concrete Steps
 
-- История взаимодействий / timeline — не начинать без подтверждения Ника.
-- Мультипользователи / назначение лида — не начинать без подтверждения Ника.
-- Telegram/WhatsApp связь с клиентом — не начинать без отдельного обсуждения.
+1. Login with the existing admin password and create owner/manager profiles in
+   `/console-x9p4m2/team/`.
+2. Run live check: login as a profile → assign a lead → edit contact/follow-up →
+   verify the action appears in `Активность менеджеров`.
+3. Ask Nick before deeper interaction timeline, visibility restrictions, or
+   Telegram/WhatsApp client messaging.
