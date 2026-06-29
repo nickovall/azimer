@@ -6,12 +6,15 @@ import { useSearchParams } from "next/navigation";
 import { useAdmin } from "@/components/admin/AdminShell";
 import {
   adminFetch,
+  assignLeadManager,
   deleteLead,
   deleteLeadDocument,
   fmtBytes,
   fmtDateTime,
   fmtRub,
   getLeadDocumentUrl,
+  listActiveManagers,
+  listLeadEvents,
   setLeadFollowUp,
   updateLeadContact,
   uploadLeadFileDirect,
@@ -25,6 +28,8 @@ import {
   STATUS_LABEL,
   SOURCE_LABEL,
   type ContactEditInput,
+  type AdminAuditEvent,
+  type AdminUser,
   type DealCommission,
   type LeadDocument,
   type LeadDocumentType,
@@ -80,6 +85,8 @@ function AdminLeadViewPage() {
   const [files, setFiles] = useState<LeadFileLink[]>([]);
   const [documents, setDocuments] = useState<LeadDocument[]>([]);
   const [commission, setCommission] = useState<DealCommission | null>(null);
+  const [managers, setManagers] = useState<AdminUser[]>([]);
+  const [events, setEvents] = useState<AdminAuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -100,6 +107,8 @@ function AdminLeadViewPage() {
   const [followUpDraft, setFollowUpDraft] = useState("");
   const [followUpNote, setFollowUpNote] = useState("");
   const [savingFollowUp, setSavingFollowUp] = useState(false);
+  const [managerDraft, setManagerDraft] = useState("");
+  const [savingManager, setSavingManager] = useState(false);
   const [docDraft, setDocDraft] = useState({
     doc_type: "kp" as LeadDocumentType,
     title: "",
@@ -150,7 +159,7 @@ function AdminLeadViewPage() {
     setLoading(true);
     setError(null);
     try {
-      const [leadR, tplR, msgR, ctxR] = await Promise.all([
+      const [leadR, tplR, msgR, ctxR, managerR, eventR] = await Promise.all([
         adminFetch<{
           ok: true;
           lead: LeadFull;
@@ -162,12 +171,20 @@ function AdminLeadViewPage() {
         adminFetch<{ ok: true; messages: LeadMessage[] }>(token, { action: "list_lead_messages", lead_id: id }),
         adminFetch<{ ok: true; context: { manager_phone: string; manager_name: string; azimer_site: string } }>(
           token, { action: "get_message_context" }
-        ).catch(() => ({ ok: true as const, context: msgContext })),
+        ).catch(() => ({
+          ok: true as const,
+          context: { manager_phone: "—", manager_name: "—", azimer_site: "https://azimer.ru" },
+        })),
+        listActiveManagers(token),
+        listLeadEvents(token, id),
       ]);
       setLead(leadR.lead);
       setFiles(leadR.files ?? []);
       setDocuments(leadR.documents ?? []);
       setCommission(leadR.commission ?? null);
+      setManagers(managerR ?? []);
+      setEvents(eventR ?? []);
+      setManagerDraft(leadR.lead.assigned_manager_id ?? "");
       setNotesDraft(leadR.lead.notes ?? "");
       setFolderDraft(leadR.lead.project_folder_url ?? "");
       setCommissionDraft({
@@ -298,6 +315,22 @@ function AdminLeadViewPage() {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSavingFollowUp(false);
+    }
+  }
+
+  async function saveManager() {
+    if (!lead) return;
+    setSavingManager(true);
+    setActionResult(null);
+    setError(null);
+    try {
+      await assignLeadManager(token, lead.id, managerDraft || null);
+      setActionResult("Ответственный обновлён");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingManager(false);
     }
   }
 
@@ -452,10 +485,14 @@ function AdminLeadViewPage() {
         setSendResult({ ok: false, text: "❌ " + (r.error ?? "Ошибка отправки") });
       }
       // обновить историю
-      const msgR = await adminFetch<{ ok: true; messages: LeadMessage[] }>(token, {
-        action: "list_lead_messages", lead_id: lead.id,
-      });
+      const [msgR, eventR] = await Promise.all([
+        adminFetch<{ ok: true; messages: LeadMessage[] }>(token, {
+          action: "list_lead_messages", lead_id: lead.id,
+        }),
+        listLeadEvents(token, lead.id),
+      ]);
       setMessages(msgR.messages ?? []);
+      setEvents(eventR ?? []);
     } catch (e) {
       setSendResult({ ok: false, text: "❌ " + (e instanceof Error ? e.message : String(e)) });
     } finally {
@@ -630,6 +667,43 @@ function AdminLeadViewPage() {
             className="rounded-full bg-graphite-950 px-4 py-2 text-xs font-semibold text-light disabled:opacity-50"
           >
             {savingFollowUp ? "..." : "Поставить"}
+          </button>
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-line bg-white p-5">
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-900/60">
+              Ответственный
+            </h2>
+            <p className="mt-1 text-sm text-graphite-900/70">
+              {lead.assigned_manager_name || "Не назначен"}
+            </p>
+          </div>
+          <span className="rounded-full bg-light px-3 py-1 text-xs text-graphite-900/50">
+            {managers.length} в команде
+          </span>
+        </header>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          <select
+            value={managerDraft}
+            onChange={(e) => setManagerDraft(e.target.value)}
+            className="min-w-0 flex-1 rounded-xl border border-line bg-light/30 px-3 py-2 text-sm text-graphite-900 focus:border-orange focus:bg-white focus:outline-none"
+          >
+            <option value="">Без ответственного</option>
+            {managers.map((manager) => (
+              <option key={manager.id} value={manager.id}>
+                {manager.display_name} ({manager.role === "owner" ? "владелец" : "менеджер"})
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={saveManager}
+            disabled={savingManager || managerDraft === (lead.assigned_manager_id ?? "")}
+            className="rounded-full bg-graphite-950 px-4 py-2 text-xs font-semibold text-light disabled:opacity-50"
+          >
+            {savingManager ? "..." : "Сохранить"}
           </button>
         </div>
       </section>
@@ -1025,6 +1099,42 @@ function AdminLeadViewPage() {
               ))}
             </ul>
           </div>
+        )}
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-line bg-white p-5">
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-graphite-900/60">
+            Активность менеджеров
+          </h2>
+          <span className="rounded-full bg-light px-3 py-1 font-mono text-xs text-graphite-900/50">
+            {events.length}
+          </span>
+        </header>
+        {events.length === 0 ? (
+          <p className="mt-3 text-sm text-graphite-900/40">Действий пока нет</p>
+        ) : (
+          <ol className="mt-4 space-y-3">
+            {events.map((event) => (
+              <li key={event.id} className="grid gap-2 border-l-2 border-line pl-3 sm:grid-cols-[150px_1fr] sm:gap-4">
+                <time className="font-mono text-xs text-graphite-900/45">
+                  {fmtDateTime(event.created_at)}
+                </time>
+                <div className="min-w-0">
+                  <p className="text-sm text-graphite-900">
+                    <span className="font-semibold">{event.actor_name || event.actor_login || "Администратор"}</span>
+                    <span className="text-graphite-900/45"> · </span>
+                    {auditActionLabel(event.action)}
+                  </p>
+                  {auditDetails(event).length > 0 && (
+                    <p className="mt-0.5 text-xs text-graphite-900/50">
+                      {auditDetails(event).join(" · ")}
+                    </p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ol>
         )}
       </section>
 
@@ -1525,6 +1635,50 @@ function CloseDealModal({
       </div>
     </div>
   );
+}
+
+const AUDIT_LABELS: Record<string, string> = {
+  login: "вошёл в админку",
+  create_lead: "создал лид",
+  update_lead_status: "изменил статус",
+  update_lead_status_legacy: "изменил статус",
+  update_lead_notes: "обновил заметки",
+  update_lead_contact: "изменил контакт",
+  set_lead_followup: "изменил напоминание",
+  assign_lead_manager: "назначил ответственного",
+  update_lead_deal_fields: "обновил атрибуцию сделки",
+  save_lead_estimate: "сохранил КП",
+  close_lead: "закрыл сделку",
+  add_lead_document: "добавил документ",
+  confirm_lead_upload: "загрузил документ",
+  delete_lead_document: "удалил документ",
+  update_deal_commission: "обновил комиссию",
+  send_to_accountant: "передал бухгалтеру",
+  send_sms: "отправил SMS",
+  send_email: "отправил Email",
+  delete_lead: "удалил лид",
+};
+
+function auditActionLabel(action: string): string {
+  return AUDIT_LABELS[action] ?? action;
+}
+
+function auditDetails(event: AdminAuditEvent): string[] {
+  const m = event.metadata ?? {};
+  const details: string[] = [];
+  if (typeof m.status === "string") details.push(`статус: ${STATUS_LABEL[m.status as LeadStatus] ?? m.status}`);
+  if (typeof m.outcome === "string") details.push(m.outcome === "won" ? "выиграли" : "отказ");
+  if (typeof m.assigned_manager_name === "string") details.push(`ответственный: ${m.assigned_manager_name}`);
+  if (m.assigned_manager_name === null) details.push("без ответственного");
+  if (Array.isArray(m.fields) && m.fields.length > 0) details.push(`поля: ${m.fields.join(", ")}`);
+  if (typeof m.doc_type === "string") details.push(`документ: ${DOCUMENT_TYPE_LABEL[m.doc_type as LeadDocumentType] ?? m.doc_type}`);
+  if (typeof m.channel === "string") details.push(m.channel.toUpperCase());
+  if (typeof m.template_slug === "string") details.push(m.template_slug);
+  if (typeof m.delivery === "string") details.push(`доставка: ${m.delivery}`);
+  if (typeof m.amount === "number") details.push(`сумма: ${fmtRub(m.amount)}`);
+  if (typeof m.final_amount === "number" && m.final_amount > 0) details.push(`договор: ${fmtRub(m.final_amount)}`);
+  if (typeof m.error === "string" && m.error) details.push(`ошибка: ${m.error}`);
+  return details;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

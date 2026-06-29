@@ -310,6 +310,9 @@ function DashboardLeadRow({ lead }: { lead: LeadRow }) {
             </p>
             <p className="mt-0.5 truncate text-xs text-graphite-900/60">
               {customer} · {STATUS_FRIENDLY[status]}
+              {lead.assigned_manager_name && (
+                <span className="ml-2">· {lead.assigned_manager_name}</span>
+              )}
               {days > 0 && (
                 <span className={days >= 7 ? "ml-2 font-semibold text-red-700" : "ml-2"}>
                   · {days === 1 ? "вчера" : `${days} дн.`}

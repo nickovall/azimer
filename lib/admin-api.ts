@@ -35,6 +35,7 @@ export type ContractStatus = "not_started" | "drafting" | "sent" | "signed";
 export type InvoiceStatus = "not_issued" | "issued";
 export type PaymentStatus = "not_paid" | "partial" | "paid";
 export type LeadDocumentType = "tz" | "kp" | "contract" | "invoice" | "act" | "payment" | "mail" | "drawing" | "other";
+export type AdminRole = "owner" | "manager";
 
 export interface LeadDocSummary {
   document_count: number;
@@ -104,6 +105,8 @@ export interface LeadRow {
   commission_rate: number;
   commission_notes: string | null;
   project_folder_url: string | null;
+  assigned_manager_id: string | null;
+  assigned_manager_name: string | null;
   name: string;
   phone: string;
   email: string | null;
@@ -174,9 +177,48 @@ export interface DashboardStats {
   recent: LeadRow[];
 }
 
+export interface AdminActor {
+  user_id: string | null;
+  login: string;
+  display_name: string;
+  phone: string | null;
+  email: string | null;
+  role: AdminRole;
+  legacy: boolean;
+}
+
 export interface AdminSession {
   token: string;
   expires_at: number;
+  actor: AdminActor;
+}
+
+export interface AdminUser {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  last_login_at: string | null;
+  login: string;
+  display_name: string;
+  phone: string | null;
+  email: string | null;
+  role: AdminRole;
+  is_active: boolean;
+  notes: string | null;
+}
+
+export interface AdminAuditEvent {
+  id: string;
+  created_at: string;
+  actor_user_id: string | null;
+  actor_login: string | null;
+  actor_name: string | null;
+  actor_role: AdminRole | null;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  lead_id: string | null;
+  metadata: Record<string, unknown>;
 }
 
 export const STATUS_LABEL_LEGACY: Partial<Record<LeadStatus, string>> = {
@@ -298,17 +340,17 @@ async function parseAdminResponse<T>(r: Response): Promise<T> {
   return r.json() as Promise<T>;
 }
 
-export async function adminLogin(password: string): Promise<AdminSession> {
+export async function adminLogin(login: string, password: string): Promise<AdminSession> {
   const r = await fetch(ADMIN_FN_URL, {
     method: "POST",
     headers: {
       "Content-Type":  "application/json",
       "apikey":        PUBLISHABLE_KEY,
     },
-    body: JSON.stringify({ action: "login", password }),
+    body: JSON.stringify({ action: "login", login: login || undefined, password }),
   });
-  const data = await parseAdminResponse<{ ok: true; token: string; expires_at: number }>(r);
-  return { token: data.token, expires_at: data.expires_at };
+  const data = await parseAdminResponse<{ ok: true; token: string; expires_at: number; actor: AdminActor }>(r);
+  return { token: data.token, expires_at: data.expires_at, actor: data.actor };
 }
 
 export async function adminFetch<T = unknown>(
@@ -360,6 +402,80 @@ export function fmtBytes(n: number | null | undefined): string {
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} КБ`;
   if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} МБ`;
   return `${(n / 1024 / 1024 / 1024).toFixed(2)} ГБ`;
+}
+
+export async function listActiveManagers(token: string): Promise<AdminUser[]> {
+  const r = await adminFetch<{ ok: true; users: AdminUser[] }>(token, {
+    action: "list_active_managers",
+  });
+  return r.users;
+}
+
+export async function assignLeadManager(
+  token: string,
+  id: string,
+  managerId: string | null,
+): Promise<LeadFull> {
+  const r = await adminFetch<{ ok: true; lead: LeadFull }>(token, {
+    action: "assign_lead_manager",
+    id,
+    manager_id: managerId,
+  });
+  return r.lead;
+}
+
+export async function listLeadEvents(token: string, leadId: string): Promise<AdminAuditEvent[]> {
+  const r = await adminFetch<{ ok: true; events: AdminAuditEvent[] }>(token, {
+    action: "list_lead_events",
+    lead_id: leadId,
+  });
+  return r.events;
+}
+
+export async function listAdminUsers(token: string): Promise<AdminUser[]> {
+  const r = await adminFetch<{ ok: true; users: AdminUser[] }>(token, {
+    action: "list_admin_users",
+  });
+  return r.users;
+}
+
+export async function createAdminUser(
+  token: string,
+  input: {
+    login: string;
+    display_name: string;
+    password: string;
+    role: AdminRole;
+    phone?: string;
+    email?: string;
+    notes?: string;
+  },
+): Promise<AdminUser> {
+  const r = await adminFetch<{ ok: true; user: AdminUser }>(token, {
+    action: "create_admin_user",
+    ...input,
+  });
+  return r.user;
+}
+
+export async function updateAdminUser(
+  token: string,
+  input: {
+    id: string;
+    display_name?: string;
+    phone?: string | null;
+    email?: string | null;
+    role?: AdminRole;
+    is_active?: boolean;
+    notes?: string | null;
+    password?: string;
+  },
+): Promise<AdminUser> {
+  const r = await adminFetch<{ ok: true; user: AdminUser }>(token, {
+    action: "update_admin_user",
+    ...input,
+  });
+  return r.user;
 }
 
 // ─────────── Загрузка файлов в lead-documents bucket ───────────

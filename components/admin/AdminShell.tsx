@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { adminFetch, adminLogin } from "@/lib/admin-api";
+import { adminFetch, adminLogin, type AdminActor } from "@/lib/admin-api";
 
 // Корень админки и gate-key доступа. Без правильного ?k= отдаём 404.
 // Gate-key попадает в JS bundle и не заменяет серверную проверку admin token.
@@ -13,6 +13,7 @@ const GATE_STORAGE = "az_g";
 
 interface AdminCtx {
   token: string;
+  actor: AdminActor;
   logout: () => void;
 }
 
@@ -26,13 +27,14 @@ export function useAdmin() {
 
 // trailingSlash добавлен явно, чтобы избежать 301-redirect и hard refresh,
 // который терял бы SPA-state AdminShell (gated/authed) и ломал админку.
-const NAV = [
+const BASE_NAV = [
   { href: ADMIN_ROOT + "/",           label: "Дашборд",   mobileLabel: "Даш",    icon: "📊" },
   { href: ADMIN_ROOT + "/leads/",     label: "Заявки",    mobileLabel: "Заявки", icon: "📩" },
   { href: ADMIN_ROOT + "/compose/",   label: "Написать",  mobileLabel: "Письмо", icon: "✏️" },
   { href: ADMIN_ROOT + "/catalog/",   label: "Каталог",   mobileLabel: "Цены",   icon: "🗂" },
   { href: ADMIN_ROOT + "/templates/", label: "Шаблоны",   mobileLabel: "Шабл.",  icon: "✉️" },
 ];
+const TEAM_NAV = { href: ADMIN_ROOT + "/team/", label: "Команда", mobileLabel: "Ком.", icon: "👥" };
 
 function normalizePath(pathname: string): string {
   const clean = pathname.replace(/\/+$/, "");
@@ -53,7 +55,9 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const [gateChecked, setGateChecked] = useState(false);
 
   const [token, setToken] = useState("");
-  const [input, setInput] = useState("");
+  const [loginInput, setLoginInput] = useState("");
+  const [passwordInput, setPasswordInput] = useState("");
+  const [actor, setActor] = useState<AdminActor | null>(null);
   const [authed, setAuthed] = useState(false);
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +92,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     } else {
       localStorage.removeItem("admin_token");
       localStorage.removeItem("admin_token_exp");
+      setActor(null);
       setChecking(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -96,28 +101,32 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   async function verifySession(savedToken: string) {
     setError(null);
     try {
-      const r = await adminFetch<{ ok: true; expires_at: number }>(savedToken, { action: "verify_session" });
+      const r = await adminFetch<{ ok: true; expires_at: number; actor: AdminActor }>(savedToken, { action: "verify_session" });
       localStorage.setItem("admin_token", savedToken);
       localStorage.setItem("admin_token_exp", String(r.expires_at));
       setToken(savedToken);
+      setActor(r.actor);
       setAuthed(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg.includes("Unauthorized") || msg.includes("401") ? "Сессия истекла" : "Ошибка: " + msg);
       setAuthed(false);
+      setActor(null);
       localStorage.removeItem("admin_token");
       localStorage.removeItem("admin_token_exp");
     }
   }
 
-  async function login(pw: string) {
+  async function login(loginValue: string, pw: string) {
     setError(null);
     try {
-      const session = await adminLogin(pw);
+      const session = await adminLogin(loginValue.trim(), pw);
       localStorage.setItem("admin_token", session.token);
       localStorage.setItem("admin_token_exp", String(session.expires_at));
       setToken(session.token);
-      setInput("");
+      setActor(session.actor);
+      setLoginInput("");
+      setPasswordInput("");
       setAuthed(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -127,6 +136,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
         setError("Ошибка: " + msg);
       }
       setAuthed(false);
+      setActor(null);
       localStorage.removeItem("admin_token");
       localStorage.removeItem("admin_token_exp");
     }
@@ -136,7 +146,9 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     localStorage.removeItem("admin_token");
     localStorage.removeItem("admin_token_exp");
     setToken("");
-    setInput("");
+    setActor(null);
+    setLoginInput("");
+    setPasswordInput("");
     setAuthed(false);
   }
 
@@ -153,7 +165,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!authed) {
+  if (!authed || !actor) {
     return (
       <div className="mx-auto max-w-md px-6 py-32">
         <h1 className="text-3xl font-bold text-graphite-900">🔒 Админка АЗИМЕР</h1>
@@ -162,16 +174,23 @@ export default function AdminShell({ children }: { children: ReactNode }) {
         </p>
         <div className="mt-6 space-y-3">
           <input
+            value={loginInput}
+            onChange={(e) => setLoginInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && login(loginInput, passwordInput)}
+            placeholder="Логин менеджера"
+            className="w-full rounded-2xl border border-line bg-white px-5 py-3 text-base focus:border-orange focus:outline-none"
+          />
+          <input
             type="password"
             autoFocus
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && login(input)}
+            value={passwordInput}
+            onChange={(e) => setPasswordInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && login(loginInput, passwordInput)}
             placeholder="Пароль"
             className="w-full rounded-2xl border border-line bg-white px-5 py-3 text-base focus:border-orange focus:outline-none"
           />
           <button
-            onClick={() => login(input)}
+            onClick={() => login(loginInput, passwordInput)}
             className="w-full rounded-full bg-orange py-3 text-sm font-semibold text-white hover:bg-orange-bright"
           >
             Войти
@@ -183,7 +202,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <Ctx.Provider value={{ token, logout }}>
+    <Ctx.Provider value={{ token, actor, logout }}>
       <div className="bg-light pb-32 pt-24 md:pb-24">
         <div className="mx-auto flex w-full max-w-[1400px] gap-6 px-3 sm:px-4 md:px-6">
           <Sidebar />
@@ -212,16 +231,20 @@ function NotFound() {
 
 function Sidebar() {
   const pathname = usePathname();
-  const { logout } = useAdmin();
+  const { actor, logout } = useAdmin();
+  const nav = actor.role === "owner" ? [...BASE_NAV, TEAM_NAV] : BASE_NAV;
 
   return (
     <aside className="sticky top-24 hidden h-fit w-56 shrink-0 rounded-2xl border border-line bg-white p-3 md:block">
       <div className="border-b border-line px-2 pb-3 pt-1">
         <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-orange">Админка</p>
         <p className="text-sm font-semibold text-graphite-900">АЗИМЕР</p>
+        <p className="mt-1 truncate text-xs text-graphite-900/50">
+          {actor.display_name} · {actor.role === "owner" ? "владелец" : "менеджер"}
+        </p>
       </div>
       <nav className="mt-3 flex flex-col gap-1">
-        {NAV.map((item) => {
+        {nav.map((item) => {
           const active = isActiveAdminPath(pathname, item.href);
           return (
             <Link
@@ -251,7 +274,8 @@ function Sidebar() {
 
 function MobileAdminNav() {
   const pathname = usePathname();
-  const { logout } = useAdmin();
+  const { actor, logout } = useAdmin();
+  const nav = actor.role === "owner" ? [...BASE_NAV, TEAM_NAV] : BASE_NAV;
 
   return (
     <nav
@@ -260,7 +284,7 @@ function MobileAdminNav() {
       aria-label="Навигация админки"
     >
       <div className="mx-auto flex max-w-md items-stretch gap-1">
-        {NAV.map((item) => {
+        {nav.map((item) => {
           const active = isActiveAdminPath(pathname, item.href);
           return (
             <Link

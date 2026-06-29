@@ -417,6 +417,11 @@ function LeadCard({
           {kpAmount && (
             <p className="text-xs font-mono tabular-nums text-graphite-900/70">≈ {fmtRub(kpAmount)}</p>
           )}
+          {lead.assigned_manager_name && (
+            <p className="line-clamp-1 text-[11px] text-graphite-900/45">
+              Ответственный: {lead.assigned_manager_name}
+            </p>
+          )}
         </div>
 
         {/* Подвал — мелким */}
@@ -594,6 +599,9 @@ function LeadTableRow({ lead }: { lead: LeadRow }) {
       <td className="px-3 py-2.5">
         <div className="font-medium text-graphite-900">{lead.company || lead.name}</div>
         <div className="mt-0.5 font-mono text-xs text-graphite-900/50">{lead.phone}</div>
+        {lead.assigned_manager_name && (
+          <div className="mt-0.5 text-xs text-graphite-900/45">{lead.assigned_manager_name}</div>
+        )}
       </td>
       <td className="px-3 py-2.5">
         <span className={`rounded-full px-2 py-0.5 text-xs whitespace-nowrap ${STATUS_COLOR[status]}`}>

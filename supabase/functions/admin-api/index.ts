@@ -57,6 +57,43 @@ const ALLOWED_PAYMENT_STATUSES = new Set(["not_paid", "partial", "paid"]);
 const ALLOWED_KP_STATUSES = new Set(["not_started", "preparing", "sent", "approved"]);
 const ALLOWED_CONTRACT_STATUSES = new Set(["not_started", "drafting", "sent", "signed"]);
 const ALLOWED_INVOICE_STATUSES = new Set(["not_issued", "issued"]);
+const ALLOWED_ADMIN_ROLES = new Set(["owner", "manager"]);
+const PASSWORD_HASH_ALG = "pbkdf2_sha256";
+const PASSWORD_HASH_ITERATIONS = 210_000;
+
+type AdminRole = "owner" | "manager";
+type AdminActor = {
+  user_id: string | null;
+  login: string;
+  display_name: string;
+  phone: string | null;
+  email: string | null;
+  role: AdminRole;
+  legacy: boolean;
+};
+
+type AdminTokenPayload = {
+  sub: "admin";
+  iat: number;
+  exp: number;
+  user_id?: string | null;
+  login?: string;
+  display_name?: string;
+  phone?: string | null;
+  email?: string | null;
+  role?: AdminRole;
+  legacy?: boolean;
+};
+
+const LEGACY_OWNER: AdminActor = {
+  user_id: null,
+  login: "legacy-admin",
+  display_name: "Администратор",
+  phone: null,
+  email: null,
+  role: "owner",
+  legacy: true,
+};
 
 function normalizeOrigin(value: string): string | null {
   try {
@@ -140,19 +177,113 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-async function createAdminToken(): Promise<{ token: string; exp: number }> {
+function normalizeLogin(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const login = value.trim().toLowerCase();
+  return /^[a-z0-9._-]{3,64}$/.test(login) ? login : null;
+}
+
+function publicAdminUser(row: any) {
+  return {
+    id: row.id,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    last_login_at: row.last_login_at,
+    login: row.login,
+    display_name: row.display_name,
+    phone: row.phone,
+    email: row.email,
+    role: row.role,
+    is_active: row.is_active,
+    notes: row.notes,
+  };
+}
+
+function actorFromRow(row: any): AdminActor {
+  return {
+    user_id: row.id,
+    login: row.login,
+    display_name: row.display_name,
+    phone: row.phone ?? null,
+    email: row.email ?? null,
+    role: row.role === "owner" ? "owner" : "manager",
+    legacy: false,
+  };
+}
+
+async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      salt,
+      iterations: PASSWORD_HASH_ITERATIONS,
+      hash: "SHA-256",
+    },
+    key,
+    256,
+  );
+  return [
+    PASSWORD_HASH_ALG,
+    String(PASSWORD_HASH_ITERATIONS),
+    bytesToBase64Url(salt),
+    bytesToBase64Url(new Uint8Array(bits)),
+  ].join("$");
+}
+
+async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  const [alg, iterRaw, saltRaw, hashRaw] = stored.split("$");
+  if (alg !== PASSWORD_HASH_ALG || !iterRaw || !saltRaw || !hashRaw) return false;
+  const iterations = Number(iterRaw);
+  if (!Number.isInteger(iterations) || iterations < 100_000 || iterations > 1_000_000) return false;
+  const salt = base64UrlToBytes(saltRaw);
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      salt,
+      iterations,
+      hash: "SHA-256",
+    },
+    key,
+    256,
+  );
+  return timingSafeEqual(bytesToBase64Url(new Uint8Array(bits)), hashRaw);
+}
+
+async function createAdminToken(actor: AdminActor): Promise<{ token: string; exp: number; actor: AdminActor }> {
   const now = Math.floor(Date.now() / 1000);
-  const payload = {
+  const payload: AdminTokenPayload = {
     sub: "admin",
     iat: now,
     exp: now + ADMIN_TOKEN_TTL_SECONDS,
+    user_id: actor.user_id,
+    login: actor.login,
+    display_name: actor.display_name,
+    phone: actor.phone,
+    email: actor.email,
+    role: actor.role,
+    legacy: actor.legacy,
   };
   const encoded = stringToBase64Url(JSON.stringify(payload));
   const sig = await hmacSha256(encoded, ADMIN_SESSION_SECRET);
-  return { token: `${encoded}.${sig}`, exp: payload.exp };
+  return { token: `${encoded}.${sig}`, exp: payload.exp, actor };
 }
 
-async function verifyAdminToken(req: Request): Promise<{ ok: true; exp: number } | { ok: false; error: string }> {
+async function verifyAdminToken(req: Request): Promise<{ ok: true; exp: number; actor: AdminActor } | { ok: false; error: string }> {
   if (!ADMIN_SESSION_SECRET) return { ok: false, error: "ADMIN_SESSION_SECRET is not configured" };
   const auth = req.headers.get("Authorization") ?? "";
   const m = auth.match(/^Bearer\s+(.+)$/i);
@@ -175,7 +306,46 @@ async function verifyAdminToken(req: Request): Promise<{ ok: true; exp: number }
   if (payload?.sub !== "admin" || typeof payload?.exp !== "number" || payload.exp <= now) {
     return { ok: false, error: "Token expired" };
   }
-  return { ok: true, exp: payload.exp };
+  if (payload.legacy === true || !payload.user_id) {
+    return { ok: true, exp: payload.exp, actor: LEGACY_OWNER };
+  }
+
+  const { data: user, error } = await sb
+    .from("admin_users")
+    .select("id, login, display_name, phone, email, role, is_active")
+    .eq("id", payload.user_id)
+    .maybeSingle();
+  if (error || !user || user.is_active !== true) {
+    return { ok: false, error: "User disabled" };
+  }
+  return { ok: true, exp: payload.exp, actor: actorFromRow(user) };
+}
+
+function requireOwner(actor: AdminActor): string | null {
+  return actor.role === "owner" ? null : "Owner role required";
+}
+
+async function logAdminEvent(
+  actor: AdminActor,
+  action: string,
+  entityType: string,
+  entityId: string | null,
+  metadata: Record<string, unknown> = {},
+  leadId?: string | null,
+) {
+  const row = {
+    actor_user_id: actor.user_id,
+    actor_login: actor.login,
+    actor_name: actor.display_name,
+    actor_role: actor.role,
+    action,
+    entity_type: entityType,
+    entity_id: entityId,
+    lead_id: leadId ?? (entityType === "lead" ? entityId : null),
+    metadata,
+  };
+  const { error } = await sb.from("admin_audit_events").insert(row);
+  if (error) console.error("admin_audit_events insert failed", error.message);
 }
 
 function nullableString(value: unknown): string | null {
@@ -340,18 +510,126 @@ Deno.serve(async (req) => {
   // ════════════════════════════════════════════════════════════════
   if (action === "login") {
     const pw = typeof body?.password === "string" ? body.password : "";
-    if (!ADMIN_PASSWORD || !ADMIN_SESSION_SECRET || pw !== ADMIN_PASSWORD) {
+    const login = normalizeLogin(body?.login);
+    if (!ADMIN_SESSION_SECRET) return json({ error: "Unauthorized" }, 401);
+
+    if (login) {
+      const { data: user, error } = await sb
+        .from("admin_users")
+        .select("id, login, display_name, phone, email, role, password_hash, is_active")
+        .eq("login", login)
+        .maybeSingle();
+      if (error || !user || user.is_active !== true || !(await verifyPassword(pw, user.password_hash))) {
+        return json({ error: "Unauthorized" }, 401);
+      }
+      await sb.from("admin_users").update({ last_login_at: new Date().toISOString() }).eq("id", user.id);
+      const session = await createAdminToken(actorFromRow(user));
+      await logAdminEvent(session.actor, "login", "admin_user", user.id);
+      return json({ ok: true, token: session.token, expires_at: session.exp, actor: session.actor });
+    }
+
+    if (!ADMIN_PASSWORD || pw !== ADMIN_PASSWORD) {
       return json({ error: "Unauthorized" }, 401);
     }
-    const session = await createAdminToken();
-    return json({ ok: true, token: session.token, expires_at: session.exp });
+    const session = await createAdminToken(LEGACY_OWNER);
+    await logAdminEvent(session.actor, "login", "admin_user", null);
+    return json({ ok: true, token: session.token, expires_at: session.exp, actor: session.actor });
   }
 
   const admin = await verifyAdminToken(req);
   if (!admin.ok) return json({ error: "Unauthorized" }, 401);
 
   if (action === "verify_session") {
-    return json({ ok: true, expires_at: admin.exp });
+    return json({ ok: true, expires_at: admin.exp, actor: admin.actor });
+  }
+
+  if (action === "list_admin_users") {
+    const ownerErr = requireOwner(admin.actor);
+    if (ownerErr) return json({ error: ownerErr }, 403);
+    const { data, error } = await sb
+      .from("admin_users")
+      .select("id, created_at, updated_at, last_login_at, login, display_name, phone, email, role, is_active, notes")
+      .order("is_active", { ascending: false })
+      .order("display_name", { ascending: true });
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true, users: (data ?? []).map(publicAdminUser), current_actor: admin.actor });
+  }
+
+  if (action === "list_active_managers") {
+    const { data, error } = await sb
+      .from("admin_users")
+      .select("id, created_at, updated_at, last_login_at, login, display_name, phone, email, role, is_active, notes")
+      .eq("is_active", true)
+      .order("display_name", { ascending: true });
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true, users: (data ?? []).map(publicAdminUser) });
+  }
+
+  if (action === "create_admin_user") {
+    const ownerErr = requireOwner(admin.actor);
+    if (ownerErr) return json({ error: ownerErr }, 403);
+    const login = normalizeLogin(body.login);
+    const displayName = nullableString(body.display_name);
+    const password = typeof body.password === "string" ? body.password : "";
+    const role = body.role === "owner" ? "owner" : "manager";
+    if (!login) return json({ error: "Bad login" }, 400);
+    if (!displayName) return json({ error: "Need display_name" }, 400);
+    if (password.length < 8) return json({ error: "Пароль минимум 8 символов" }, 400);
+
+    const passwordHash = await hashPassword(password);
+    const { data, error } = await sb.from("admin_users").insert({
+      login,
+      display_name: displayName,
+      phone: nullableString(body.phone),
+      email: nullableString(body.email),
+      role,
+      password_hash: passwordHash,
+      notes: nullableString(body.notes),
+    }).select("id, created_at, updated_at, last_login_at, login, display_name, phone, email, role, is_active, notes").single();
+    if (error) return json({ error: error.message }, 500);
+    await logAdminEvent(admin.actor, "create_admin_user", "admin_user", data.id, {
+      login,
+      role,
+      display_name: displayName,
+    });
+    return json({ ok: true, user: publicAdminUser(data) });
+  }
+
+  if (action === "update_admin_user") {
+    const ownerErr = requireOwner(admin.actor);
+    if (ownerErr) return json({ error: ownerErr }, 403);
+    const id = typeof body.id === "string" ? body.id : "";
+    if (!id) return json({ error: "Need id" }, 400);
+
+    const patch: Record<string, unknown> = {};
+    if (body.display_name !== undefined) {
+      const displayName = nullableString(body.display_name);
+      if (!displayName) return json({ error: "Need display_name" }, 400);
+      patch.display_name = displayName;
+    }
+    if (body.phone !== undefined) patch.phone = nullableString(body.phone);
+    if (body.email !== undefined) patch.email = nullableString(body.email);
+    if (body.role !== undefined) {
+      if (!ALLOWED_ADMIN_ROLES.has(body.role)) return json({ error: "Bad role" }, 400);
+      patch.role = body.role;
+    }
+    if (body.is_active !== undefined) patch.is_active = body.is_active === true;
+    if (body.notes !== undefined) patch.notes = nullableString(body.notes);
+    if (typeof body.password === "string" && body.password.length > 0) {
+      if (body.password.length < 8) return json({ error: "Пароль минимум 8 символов" }, 400);
+      patch.password_hash = await hashPassword(body.password);
+    }
+    if (Object.keys(patch).length === 0) return json({ error: "No fields to update" }, 400);
+
+    const { data, error } = await sb.from("admin_users").update(patch).eq("id", id)
+      .select("id, created_at, updated_at, last_login_at, login, display_name, phone, email, role, is_active, notes")
+      .single();
+    if (error) return json({ error: error.message }, 500);
+    await logAdminEvent(admin.actor, "update_admin_user", "admin_user", id, {
+      fields: Object.keys(patch).filter((key) => key !== "password_hash"),
+      password_changed: patch.password_hash !== undefined,
+    });
+    return json({ ok: true, user: publicAdminUser(data) });
   }
 
   // ════════════════════════════════════════════════════════════════
@@ -372,6 +650,13 @@ Deno.serve(async (req) => {
       p_source:   source ?? "manual",
     });
     if (error) return json({ error: error.message }, 500);
+    await logAdminEvent(admin.actor, "update_price", "catalog_item", data ?? null, {
+      category,
+      key,
+      price,
+      vendor: vendor ?? null,
+      source: source ?? "manual",
+    });
     return json({ ok: true, id: data });
   }
 
@@ -391,6 +676,10 @@ Deno.serve(async (req) => {
       });
       results.push({ key: it.key, ok: !error, error: error?.message });
     }
+    await logAdminEvent(admin.actor, "bulk_update_prices", "catalog_item", null, {
+      total: items.length,
+      ok: results.filter((r) => r.ok).length,
+    });
     return json({ ok: true, results });
   }
 
@@ -430,7 +719,8 @@ Deno.serve(async (req) => {
         external_source_url, created_by_system, status, deal_status,
         status_updated_at, kp_status, contract_status, invoice_status,
         payment_status, commission_eligible, commission_rate,
-        commission_notes, project_folder_url, name, phone, email,
+        commission_notes, project_folder_url, assigned_manager_id,
+        assigned_manager_name, name, phone, email,
         client_type, object_type, company, message, estimate, utm_source,
         utm_medium, utm_campaign, landing_page, follow_up_at, follow_up_note
       `, { count: "exact" })
@@ -591,6 +881,10 @@ Deno.serve(async (req) => {
       message:     nullableString(body.message),
       created_by_system: "admin-manual",
     };
+    if (admin.actor.user_id) {
+      insert.assigned_manager_id = admin.actor.user_id;
+      insert.assigned_manager_name = admin.actor.display_name;
+    }
 
     const { data, error } = await sb
       .from("leads")
@@ -598,6 +892,10 @@ Deno.serve(async (req) => {
       .select("id, lead_code")
       .single();
     if (error) return json({ error: error.message }, 500);
+    await logAdminEvent(admin.actor, "create_lead", "lead", data.id, {
+      lead_code: data.lead_code,
+      source_channel: "manual",
+    });
     return json({ ok: true, id: data.id, lead_code: data.lead_code });
   }
 
@@ -644,6 +942,7 @@ Deno.serve(async (req) => {
     }
     const { error } = await sb.from("leads").update(pipelinePatchForStatus(status)).eq("id", id);
     if (error) return json({ error: error.message }, 500);
+    await logAdminEvent(admin.actor, "update_lead_status", "lead", id, { status });
     return json({ ok: true });
   }
 
@@ -655,6 +954,7 @@ Deno.serve(async (req) => {
     }
     const { error } = await sb.from("leads").update({ status }).eq("id", id);
     if (error) return json({ error: error.message }, 500);
+    await logAdminEvent(admin.actor, "update_lead_status_legacy", "lead", id, { status });
     return json({ ok: true });
   }
 
@@ -665,6 +965,7 @@ Deno.serve(async (req) => {
     if (typeof notes !== "string") return json({ error: "notes must be string" }, 400);
     const { error } = await sb.from("leads").update({ notes }).eq("id", id);
     if (error) return json({ error: error.message }, 500);
+    await logAdminEvent(admin.actor, "update_lead_notes", "lead", id, { length: notes.length });
     return json({ ok: true });
   }
 
@@ -697,6 +998,9 @@ Deno.serve(async (req) => {
 
     const { data, error } = await sb.from("leads").update(patch).eq("id", id).select("*").single();
     if (error) return json({ error: error.message }, 500);
+    await logAdminEvent(admin.actor, "update_lead_contact", "lead", id, {
+      fields: Object.keys(patch),
+    });
     return json({ ok: true, lead: data });
   }
 
@@ -721,6 +1025,11 @@ Deno.serve(async (req) => {
 
     const { data, error } = await sb.from("leads").update(patch).eq("id", id).select("*").single();
     if (error) return json({ error: error.message }, 500);
+    await logAdminEvent(admin.actor, "set_lead_followup", "lead", id, {
+      has_follow_up: patch.follow_up_at !== null,
+      follow_up_at: patch.follow_up_at ?? null,
+      has_note: !!patch.follow_up_note,
+    });
     return json({ ok: true, lead: data });
   }
 
@@ -733,6 +1042,7 @@ Deno.serve(async (req) => {
     if (!id) return json({ error: "Need id" }, 400);
     const { error } = await sb.from("leads").delete().eq("id", id);
     if (error) return json({ error: error.message }, 500);
+    await logAdminEvent(admin.actor, "delete_lead", "lead", id);
     return json({ ok: true });
   }
 
@@ -785,7 +1095,7 @@ Deno.serve(async (req) => {
       storage_provider: "other",  // живёт в lead.estimate, не как файл
       amount: base > 0 ? base : null,
       currency: "RUB",
-      uploaded_by: "admin",
+      uploaded_by: admin.actor.display_name,
       notes: catalogVersion ? `catalog ${catalogVersion}` : null,
     }).select("*").single();
     if (docErr) return json({ error: docErr.message }, 500);
@@ -800,10 +1110,48 @@ Deno.serve(async (req) => {
       }, { onConflict: "lead_id" });
     }
 
+    await logAdminEvent(admin.actor, "save_lead_estimate", "lead", id, {
+      version,
+      amount: base > 0 ? base : null,
+      catalog_version: catalogVersion,
+    });
     return json({ ok: true, version, document: doc });
   }
 
   // ════════════════════════════════════════════════════════════════
+  if (action === "assign_lead_manager") {
+    const id = typeof body.id === "string" ? body.id : "";
+    if (!id) return json({ error: "Need id" }, 400);
+
+    let patch: Record<string, unknown>;
+    let managerMeta: Record<string, unknown>;
+    if (body.manager_id === null || body.manager_id === "") {
+      patch = { assigned_manager_id: null, assigned_manager_name: null };
+      managerMeta = { assigned_manager_id: null, assigned_manager_name: null };
+    } else if (typeof body.manager_id === "string") {
+      const { data: manager, error: managerErr } = await sb
+        .from("admin_users")
+        .select("id, display_name, is_active")
+        .eq("id", body.manager_id)
+        .single();
+      if (managerErr || !manager || manager.is_active !== true) {
+        return json({ error: managerErr?.message ?? "Manager not found" }, 400);
+      }
+      patch = {
+        assigned_manager_id: manager.id,
+        assigned_manager_name: manager.display_name,
+      };
+      managerMeta = patch;
+    } else {
+      return json({ error: "manager_id must be string or null" }, 400);
+    }
+
+    const { data, error } = await sb.from("leads").update(patch).eq("id", id).select("*").single();
+    if (error) return json({ error: error.message }, 500);
+    await logAdminEvent(admin.actor, "assign_lead_manager", "lead", id, managerMeta);
+    return json({ ok: true, lead: data });
+  }
+
   if (action === "update_lead_deal_fields") {
     const { id } = body;
     if (!id) return json({ error: "Need id" }, 400);
@@ -856,6 +1204,9 @@ Deno.serve(async (req) => {
 
     const { data, error } = await sb.from("leads").update(patch).eq("id", id).select("*").single();
     if (error) return json({ error: error.message }, 500);
+    await logAdminEvent(admin.actor, "update_lead_deal_fields", "lead", id, {
+      fields: Object.keys(patch),
+    });
     return json({ ok: true, lead: data });
   }
 
@@ -887,6 +1238,11 @@ Deno.serve(async (req) => {
         notes: combined || null,
       }).eq("id", id);
       if (error) return json({ error: error.message }, 500);
+      await logAdminEvent(admin.actor, "close_lead", "lead", id, {
+        outcome,
+        reason,
+        has_note: !!note,
+      });
       return json({ ok: true, status: "lost" });
     }
 
@@ -939,7 +1295,7 @@ Deno.serve(async (req) => {
       storage_provider: "other",
       amount: finalN > 0 ? finalN : null,
       currency: "RUB",
-      uploaded_by: "admin",
+      uploaded_by: admin.actor.display_name,
       notes: note,
     });
 
@@ -956,6 +1312,15 @@ Deno.serve(async (req) => {
       }, { onConflict: "lead_id" });
     }
 
+    await logAdminEvent(admin.actor, "close_lead", "lead", id, {
+      outcome,
+      status: newStatus,
+      final_amount: finalN,
+      paid_amount: paidN,
+      payment_status: paymentStatus,
+      contract_date: contractDate,
+      has_note: !!note,
+    });
     return json({ ok: true, status: newStatus, payment_status: paymentStatus });
   }
 
@@ -987,7 +1352,7 @@ Deno.serve(async (req) => {
       storage_path: nullableString(body.storage_path),
       amount,
       currency: "RUB",
-      uploaded_by: nullableString(body.uploaded_by),
+      uploaded_by: nullableString(body.uploaded_by) ?? admin.actor.display_name,
       notes: nullableString(body.notes),
     };
     const { data, error } = await sb.from("lead_documents").insert(row).select("*").single();
@@ -1015,6 +1380,12 @@ Deno.serve(async (req) => {
       }
     }
 
+    await logAdminEvent(admin.actor, "add_lead_document", "lead_document", data.id, {
+      lead_id: leadId,
+      doc_type: docType,
+      title,
+      amount,
+    }, leadId);
     return json({ ok: true, document: data });
   }
 
@@ -1076,7 +1447,7 @@ Deno.serve(async (req) => {
       original_filename: originalFilename,
       amount,
       currency: "RUB",
-      uploaded_by: nullableString(body.uploaded_by) ?? "admin",
+      uploaded_by: nullableString(body.uploaded_by) ?? admin.actor.display_name,
     }).select("*").single();
     if (error) return json({ error: error.message }, 500);
 
@@ -1102,6 +1473,14 @@ Deno.serve(async (req) => {
       }
     }
 
+    await logAdminEvent(admin.actor, "confirm_lead_upload", "lead_document", doc.id, {
+      lead_id: leadId,
+      doc_type: docType,
+      title,
+      storage_path: storagePath,
+      file_size_bytes: fileSize,
+      amount,
+    }, leadId);
     return json({ ok: true, document: doc });
   }
 
@@ -1123,13 +1502,18 @@ Deno.serve(async (req) => {
   if (action === "delete_lead_document") {
     const docId = body.document_id as string | undefined;
     if (!docId) return json({ error: "Need document_id" }, 400);
-    const docR = await sb.from("lead_documents").select("storage_bucket, storage_path").eq("id", docId).single();
+    const docR = await sb.from("lead_documents").select("lead_id, doc_type, title, storage_bucket, storage_path").eq("id", docId).single();
     if (docR.error || !docR.data) return json({ error: docR.error?.message ?? "Document not found" }, 404);
     if (docR.data.storage_bucket && docR.data.storage_path) {
       await sb.storage.from(docR.data.storage_bucket).remove([docR.data.storage_path]);
     }
     const { error } = await sb.from("lead_documents").delete().eq("id", docId);
     if (error) return json({ error: error.message }, 500);
+    await logAdminEvent(admin.actor, "delete_lead_document", "lead_document", docId, {
+      lead_id: docR.data.lead_id,
+      doc_type: docR.data.doc_type,
+      title: docR.data.title,
+    }, docR.data.lead_id);
     return json({ ok: true });
   }
 
@@ -1175,6 +1559,14 @@ Deno.serve(async (req) => {
       commission_rate: rate,
       payment_status: paymentStatus,
     }).eq("id", leadId);
+    await logAdminEvent(admin.actor, "update_deal_commission", "lead", leadId, {
+      commission_rate: rate,
+      kp_amount: kpAmount,
+      invoice_amount: invoiceAmount,
+      paid_amount: paidAmount,
+      commission_paid: commissionPaid,
+      payment_status: paymentStatus,
+    });
     return json({ ok: true, commission: data });
   }
 
@@ -1204,6 +1596,10 @@ Deno.serve(async (req) => {
 
     const { error } = await sb.from("leads").update(pipelinePatchForStatus("sent_to_accountant")).eq("id", id);
     if (error) return json({ error: error.message }, 500);
+    await logAdminEvent(admin.actor, "send_to_accountant", "lead", id, {
+      delivery,
+      delivery_error: deliveryError,
+    });
     return json({ ok: true, delivery, delivery_error: deliveryError, notification_text: notice });
   }
 
@@ -1303,10 +1699,20 @@ Deno.serve(async (req) => {
     if (id) {
       const { error } = await sb.from("message_templates").update(row).eq("id", id);
       if (error) return json({ error: error.message }, 500);
+      await logAdminEvent(admin.actor, "save_template", "message_template", id, {
+        channel,
+        slug,
+        is_active: row.is_active,
+      });
       return json({ ok: true, id });
     } else {
       const { data, error } = await sb.from("message_templates").insert(row).select("id").single();
       if (error) return json({ error: error.message }, 500);
+      await logAdminEvent(admin.actor, "save_template", "message_template", data.id, {
+        channel,
+        slug,
+        is_active: row.is_active,
+      });
       return json({ ok: true, id: data.id });
     }
   }
@@ -1317,6 +1723,7 @@ Deno.serve(async (req) => {
     // soft delete
     const { error } = await sb.from("message_templates").update({ is_active: false }).eq("id", id);
     if (error) return json({ error: error.message }, 500);
+    await logAdminEvent(admin.actor, "delete_template", "message_template", id);
     return json({ ok: true });
   }
 
@@ -1336,6 +1743,10 @@ Deno.serve(async (req) => {
     if (!text) return json({ error: "Need body" }, 400);
     const r = await sendEmail(to, subject, text);
     if (!r.ok) return json({ error: r.error ?? "send failed", response: r.response }, 500);
+    await logAdminEvent(admin.actor, "send_freeform_email", "message", null, {
+      to,
+      subject,
+    });
     return json({ ok: true, response: r.response });
   }
 
@@ -1346,6 +1757,9 @@ Deno.serve(async (req) => {
     if (!text) return json({ error: "Need body" }, 400);
     const r = await sendSms(to, text);
     if (!r.ok) return json({ error: r.error ?? "send failed", response: r.response }, 500);
+    await logAdminEvent(admin.actor, "send_freeform_sms", "message", null, {
+      to: normalizePhone(to) ?? to,
+    });
     return json({ ok: true, response: r.response });
   }
 
@@ -1374,8 +1788,8 @@ Deno.serve(async (req) => {
     if (!rawBody) return json({ error: "Need template or custom_body" }, 400);
 
     // 3. Рендер плейсхолдеров
-    const bodyRendered = renderPlaceholders(rawBody, lead);
-    const subjectRendered = rawSubject ? renderPlaceholders(rawSubject, lead) : null;
+    const bodyRendered = renderPlaceholders(rawBody, lead, admin.actor);
+    const subjectRendered = rawSubject ? renderPlaceholders(rawSubject, lead, admin.actor) : null;
 
     // 4. Recipient
     const recipient = channel === "sms" ? normalizePhone(lead.phone) : lead.email;
@@ -1419,6 +1833,15 @@ Deno.serve(async (req) => {
       error_message: errorMsg,
     }).eq("id", msgId);
 
+    await logAdminEvent(admin.actor, action, "lead_message", msgId, {
+      lead_id,
+      channel,
+      status,
+      template_id: tpl?.id ?? null,
+      template_slug: tpl?.slug ?? template_slug ?? null,
+      recipient,
+      error: errorMsg,
+    }, lead_id);
     return json({
       ok: status === "sent",
       message_id: msgId,
@@ -1431,11 +1854,13 @@ Deno.serve(async (req) => {
   if (action === "get_message_context") {
     // Возвращает значения env которые используются в плейсхолдерах шаблонов —
     // для корректного превью в UI (чтобы превью совпадало с реальной отправкой).
+    const managerPhone = admin.actor.phone || MANAGER_PHONE;
+    const managerName = admin.actor.legacy ? MANAGER_NAME : admin.actor.display_name;
     return json({
       ok: true,
       context: {
-        manager_phone: MANAGER_PHONE,
-        manager_name: MANAGER_NAME,
+        manager_phone: managerPhone,
+        manager_name: managerName,
         azimer_site: SITE_URL,
       },
     });
@@ -1450,6 +1875,19 @@ Deno.serve(async (req) => {
       .order("sent_at", { ascending: false });
     if (error) return json({ error: error.message }, 500);
     return json({ ok: true, messages: data });
+  }
+
+  if (action === "list_lead_events") {
+    const leadId = body.lead_id as string | undefined;
+    const limit = Math.min(Number(body.limit ?? 80), 200);
+    if (!leadId) return json({ error: "Need lead_id" }, 400);
+    const { data, error } = await sb.from("admin_audit_events")
+      .select("id, created_at, actor_user_id, actor_login, actor_name, actor_role, action, entity_type, entity_id, lead_id, metadata")
+      .eq("lead_id", leadId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) return json({ error: error.message }, 500);
+    return json({ ok: true, events: data ?? [] });
   }
 
   // ════════════════════════════════════════════════════════════════
@@ -1611,7 +2049,7 @@ function mapKpFoundation(value: string | undefined): string {
   return "none";
 }
 
-function renderPlaceholders(body: string, lead: any): string {
+function renderPlaceholders(body: string, lead: any, actor?: AdminActor): string {
   const est = lead?.estimate ?? {};
   const state = est?.state ?? {};
   const today = new Date();
@@ -1631,8 +2069,8 @@ function renderPlaceholders(body: string, lead: any): string {
     kp_range: (typeof est.low === "number" && typeof est.high === "number")
       ? `${fmtRubMsg(est.low)} — ${fmtRubMsg(est.high)}`
       : "—",
-    manager_phone: MANAGER_PHONE,
-    manager_name: MANAGER_NAME,
+    manager_phone: actor?.phone || MANAGER_PHONE,
+    manager_name: actor && !actor.legacy ? actor.display_name : MANAGER_NAME,
     date: `${dd}.${mm}.${yyyy}`,
     azimer_site: SITE_URL,
   };
