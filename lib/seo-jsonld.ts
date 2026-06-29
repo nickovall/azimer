@@ -17,8 +17,10 @@ export const organizationJsonLd: Record<string, unknown> = {
   email: company.email,
   address: {
     "@type": "PostalAddress",
+    streetAddress: "ул. Караульная, д. 88, офис 9-21",
     addressLocality: "Красноярск",
     addressRegion: "Красноярский край",
+    postalCode: "660020",
     addressCountry: "RU",
   },
   areaServed: {
