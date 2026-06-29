@@ -137,8 +137,11 @@ reminders. Dashboard now shows all active follow-up reminders sorted by time.
 - [verified] Local mocked browser smoke passed: set reminder → dashboard block
   visible → kanban bell visible → clear reminder → dashboard block hidden;
   contact edit phone/email saves and re-renders.
+- [verified] Prod mocked browser smoke on `https://azimer.ru` passed after deploy.
 - [verified] `npx tsc --noEmit` clean.
 - [verified] `npx next build` clean (25 static routes).
+- [deployed] Commit `a5a05d3` pushed to `gitlab/main` and `origin/main`; GitLab
+  pipeline `#2635966225` succeeded.
 - [blocked] Live prod click-test against real `admin-api` still needs the actual
   admin password or an existing admin session token; no such secret was present
   in local project files.
@@ -152,9 +155,8 @@ reminders. Dashboard now shows all active follow-up reminders sorted by time.
 
 ### Next Concrete Steps
 
-1. Deploy the dashboard fix through GitLab Pages.
-2. With admin password/session, run the live prod click-test on a real lead.
-3. Ask Nick before starting timeline, multi-user assignment, or Telegram/WhatsApp
+1. With admin password/session, run the live prod click-test on a real lead.
+2. Ask Nick before starting timeline, multi-user assignment, or Telegram/WhatsApp
    client messaging.
 
 ### File Index

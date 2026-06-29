@@ -6,7 +6,7 @@
 
 - Шаг 0 выполнен: прочитаны `AGENTS.md`, `docs/SESSION_HANDOFF_2026-06-28.md`, `HANDOFF.md`, `docs/PROJECT_HANDOFF.md`, плюс обязательный `docs/llm/README.md`.
 - Найден и исправлен UI-баг dashboard: напоминание «Завтра 10:00» ставилось, но не попадало в блок «🔔 Напоминания на сегодня», потому что dashboard показывал только overdue/today.
-- `admin-api` не менялся; миграции не нужны. Локальная mocked browser-проверка сценариев прошла, `npx tsc --noEmit` и `npx next build` чистые.
+- `admin-api` не менялся; миграции не нужны. Локальная и prod mocked browser-проверки сценариев прошли, `npx tsc --noEmit` и `npx next build` чистые. Деплой сайта выполнен.
 
 ## What Changed
 
@@ -26,20 +26,22 @@
   7. секция «Контакт» → «✏ Изменить» → телефон/email → «Сохранить» → значения обновились.
 - `npx tsc --noEmit` — pass.
 - `npx next build` — pass, 25 static routes.
+- Prod mocked browser smoke на `https://azimer.ru` после деплоя — pass.
 
 ## Not Verified Live
 
 - Живой prod click-test с реальным `admin-api` не выполнен: в локальных файлах нет `ADMIN_PASSWORD` или сохранённого admin session token.
 - Для полного live-теста нужен пароль админки или действующая admin-сессия в браузере.
 
-## Deployment Notes
+## Deployment
 
-- Менялась только Next-админка, поэтому `supabase functions deploy admin-api --no-verify-jwt` не нужен.
-- Для прод-деплоя достаточно commit → `git push gitlab main` (CI static site) → `git push origin main`.
+- Commit: `a5a05d3 fix(admin): show scheduled follow-up reminders`.
+- Pushed to `gitlab/main` and `origin/main`.
+- GitLab pipeline `#2635966225` — success.
+- Менялась только Next-админка, поэтому `supabase functions deploy admin-api --no-verify-jwt` не выполнялся и не нужен.
 
 ## Deferred
 
 - История взаимодействий / timeline — не начинать без подтверждения Ника.
 - Мультипользователи / назначение лида — не начинать без подтверждения Ника.
 - Telegram/WhatsApp связь с клиентом — не начинать без отдельного обсуждения.
-
