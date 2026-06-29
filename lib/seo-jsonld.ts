@@ -7,14 +7,27 @@ export const organizationJsonLd: Record<string, unknown> = {
   "@type": ["Organization", "LocalBusiness"],
   "@id": `${SITE_URL}/#organization`,
   name: company.name,
+  alternateName: [company.legalName, "Азимер", "Azimer"],
   legalName: company.legalName,
   url: SITE_URL,
   logo: `${SITE_URL}/logo-light.svg`,
   image: `${SITE_URL}/og-image.png`,
+  slogan: company.tagline,
   description:
     "Проектирование, изготовление и монтаж каркасных зданий под ключ: жилые дома, склады, ангары, производственные и коммерческие объекты.",
   telephone: company.phoneHref.replace(/^tel:/, ""),
   email: company.email,
+  taxID: company.inn,
+  foundingDate: "2023-02-17",
+  founder: {
+    "@type": "Person",
+    name: company.director,
+  },
+  identifier: [
+    { "@type": "PropertyValue", propertyID: "ИНН", value: company.inn },
+    { "@type": "PropertyValue", propertyID: "ОГРН", value: company.ogrn },
+    { "@type": "PropertyValue", propertyID: "КПП", value: company.kpp },
+  ],
   address: {
     "@type": "PostalAddress",
     streetAddress: "ул. Караульная, д. 88, офис 9-21",
@@ -36,7 +49,21 @@ export const organizationJsonLd: Record<string, unknown> = {
       closes: "18:00",
     },
   ],
-  sameAs: [company.vkProfileHref],
+  knowsAbout: [
+    "каркасное строительство",
+    "каркасные здания",
+    "металлокаркасы",
+    "ЛСТК",
+    "ангары",
+    "склады",
+    "кровельные работы",
+  ],
+  sameAs: [
+    company.vkProfileHref,
+    "https://companies.rbc.ru/id/1232400004242-obschestvo-s-ogranichennoj-otvetstvennostyu-azimer/",
+    "https://checko.ru/company/azimer-1232400004242",
+    "https://www.list-org.com/company/13903408",
+  ],
 };
 
 export const websiteJsonLd: Record<string, unknown> = {
