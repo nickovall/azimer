@@ -118,6 +118,50 @@ lib/seo-jsonld.ts
   `application/ld+json` scripts.
 - Track A: technical SEO fixes without adding new SEO landing pages.
 
+## Work Handoff As Of 2026-06-29 (Follow-up dashboard verification fix)
+
+### TL;DR
+
+Codex verified the new follow-up/contact UI with a mocked browser smoke and
+found one dashboard bug before live prod testing: «Завтра 10:00» was saved on
+the lead and shown on kanban, but the dashboard block only included overdue/today
+reminders. Dashboard now shows all active follow-up reminders sorted by time.
+
+### Current State
+
+- [done] `app/console-x9p4m2/page.tsx` now includes future scheduled reminders
+  in the dashboard reminder block, so the «Завтра 10:00» quick action surfaces
+  immediately.
+- [done] `admin-api` was not changed; actions `update_lead_contact` and
+  `set_lead_followup` remain as deployed on 2026-06-28.
+- [verified] Local mocked browser smoke passed: set reminder → dashboard block
+  visible → kanban bell visible → clear reminder → dashboard block hidden;
+  contact edit phone/email saves and re-renders.
+- [verified] `npx tsc --noEmit` clean.
+- [verified] `npx next build` clean (25 static routes).
+- [blocked] Live prod click-test against real `admin-api` still needs the actual
+  admin password or an existing admin session token; no such secret was present
+  in local project files.
+
+### Key Decisions
+
+- Kept the fix in dashboard UI only because backend writes already return
+  `follow_up_at`/`follow_up_note`, and the failure was a client-side visibility
+  filter.
+- Did not redeploy `admin-api` because no Edge Function code changed.
+
+### Next Concrete Steps
+
+1. Deploy the dashboard fix through GitLab Pages.
+2. With admin password/session, run the live prod click-test on a real lead.
+3. Ask Nick before starting timeline, multi-user assignment, or Telegram/WhatsApp
+   client messaging.
+
+### File Index
+
+- `app/console-x9p4m2/page.tsx`
+- `docs/SESSION_HANDOFF_2026-06-29.md`
+
 ## Work Handoff As Of 2026-06-28 (Lead contacts edit + follow-up reminders)
 
 ### TL;DR

@@ -48,12 +48,10 @@ export default function AdminDashboardPage() {
   const money = useMemo(() => computeMoney(leads), [leads]);
   const greeting = useMemo(() => getGreeting(), []);
 
-  // Напоминания, которые пора показать: просроченные + на сегодня (до конца суток).
+  // Активные напоминания: просроченные, сегодняшние и будущие запланированные касания.
   const dueFollowUps = useMemo(() => {
-    const end = new Date(); end.setHours(23, 59, 59, 999);
-    const endMs = end.getTime();
     return leads
-      .filter((l) => l.follow_up_at && new Date(l.follow_up_at).getTime() <= endMs)
+      .filter((l) => l.follow_up_at && Number.isFinite(new Date(l.follow_up_at).getTime()))
       .sort((a, b) => new Date(a.follow_up_at!).getTime() - new Date(b.follow_up_at!).getTime());
   }, [leads]);
 
