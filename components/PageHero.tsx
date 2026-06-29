@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import type { ReactNode } from "react";
 import Container from "./ui/Container";
 
 export default function PageHero({
@@ -7,11 +8,13 @@ export default function PageHero({
   subtitle,
   crumb,
   image,
+  children,
 }: {
   title: string;
   subtitle?: string;
   crumb: string;
   image?: string;
+  children?: ReactNode;
 }) {
   return (
     <section className="relative overflow-hidden bg-graphite-950 text-light">
@@ -49,6 +52,7 @@ export default function PageHero({
               {subtitle}
             </p>
           )}
+          {children}
         </div>
       </Container>
     </section>

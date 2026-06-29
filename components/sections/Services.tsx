@@ -1,7 +1,15 @@
+import Link from "next/link";
 import Container from "../ui/Container";
 import Label from "../ui/Label";
 import Reveal from "../ui/Reveal";
 import { services } from "@/lib/content";
+
+const serviceLinks: Record<string, string> = {
+  Металлокаркасы: "/uslugi/metallokarkasy",
+  ЛСТК: "/uslugi/lstk",
+  "Ангары и склады": "/uslugi/angary",
+  "Производственные объекты": "/uslugi/bystrovozvodimye-zdaniya",
+};
 
 export default function Services() {
   return (
@@ -24,22 +32,34 @@ export default function Services() {
         </div>
 
         <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {services.map((s, i) => (
-            <Reveal
-              key={s.n}
-              delay={(i % 3) * 0.08}
-              className="group relative flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-graphite-900 p-7 transition-all duration-400 hover:-translate-y-1.5 hover:border-orange/40 md:p-8"
-            >
-              <span className="font-mono text-sm text-light/30 transition-colors duration-300 group-hover:text-orange">
-                {s.n}
-              </span>
-              <h3 className="mt-5 text-xl font-bold">{s.title}</h3>
-              <p className="mt-3 text-sm leading-relaxed text-light/55">
-                {s.text}
-              </p>
-              <span className="mt-7 h-px w-10 bg-white/15 transition-all duration-400 group-hover:w-full group-hover:bg-orange" />
-            </Reveal>
-          ))}
+          {services.map((s, i) => {
+            const href = serviceLinks[s.title];
+
+            return (
+              <Reveal
+                key={s.n}
+                delay={(i % 3) * 0.08}
+                className="group relative flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-graphite-900 p-7 transition-all duration-400 hover:-translate-y-1.5 hover:border-orange/40 md:p-8"
+              >
+                <span className="font-mono text-sm text-light/30 transition-colors duration-300 group-hover:text-orange">
+                  {s.n}
+                </span>
+                <h3 className="mt-5 text-xl font-bold">{s.title}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-light/55">
+                  {s.text}
+                </p>
+                <span className="mt-7 h-px w-10 bg-white/15 transition-all duration-400 group-hover:w-full group-hover:bg-orange" />
+                {href ? (
+                  <Link
+                    href={href}
+                    className="mt-5 inline-flex text-sm font-semibold text-orange transition-colors hover:text-orange-bright"
+                  >
+                    Подробнее
+                  </Link>
+                ) : null}
+              </Reveal>
+            );
+          })}
         </div>
       </Container>
     </section>

@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { serviceLandingPages } from "@/lib/service-landing-pages";
 
 export const dynamic = "force-static";
 
@@ -16,6 +17,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: "/estimate-project",priority: 0.9, changeFrequency: "monthly" as const },
     { path: "/partners",        priority: 0.6, changeFrequency: "yearly" as const },
     { path: "/privacy",         priority: 0.3, changeFrequency: "yearly" as const },
+    ...serviceLandingPages.map((page) => ({
+      path: `/uslugi/${page.slug}`,
+      priority: 0.85,
+      changeFrequency: "monthly" as const,
+    })),
   ];
 
   return routes.map((r) => ({

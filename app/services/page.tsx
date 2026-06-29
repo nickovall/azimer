@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import PageHero from "@/components/PageHero";
 import Container from "@/components/ui/Container";
 import Label from "@/components/ui/Label";
@@ -8,6 +9,7 @@ import CtaFinal from "@/components/sections/CtaFinal";
 import JsonLd from "@/components/seo/JsonLd";
 import { servicesDetailed, objectTypesFull, b2bAdvantages } from "@/lib/content";
 import { breadcrumbJsonLd, faqPageJsonLd, serviceJsonLd } from "@/lib/seo-jsonld";
+import { serviceLandingPages } from "@/lib/service-landing-pages";
 
 export const metadata: Metadata = {
   title: "Услуги — Каркасное строительство · АЗИМЕР",
@@ -52,6 +54,46 @@ export default function UslugiPage() {
         subtitle="Берём объект целиком — от проектирования и изготовления до монтажа и закрытия контура. Без дробления ответственности между подрядчиками."
         image="/photos/proc-panel.jpg"
       />
+
+      <section className="bg-light py-20 md:py-28">
+        <Container>
+          <Reveal>
+            <Label>Направления</Label>
+            <h2 className="mt-6 max-w-[18ch] text-3xl font-extrabold leading-[1.08] text-graphite-900 md:text-[2.7rem]">
+              Отдельные страницы под задачи бизнеса
+            </h2>
+            <p className="mt-5 max-w-2xl text-base leading-relaxed text-graphite-900/65">
+              Выберите тип объекта, чтобы сразу увидеть состав работ, фото и
+              вопросы для расчета коммерческого предложения.
+            </p>
+          </Reveal>
+
+          <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {serviceLandingPages.map((page, index) => (
+              <Reveal
+                key={page.slug}
+                delay={(index % 3) * 0.06}
+                className="group rounded-2xl border border-line bg-white p-6 transition-colors hover:border-orange/50"
+              >
+                <Link href={`/uslugi/${page.slug}`} className="block">
+                  <span className="font-mono text-xs uppercase tracking-[0.14em] text-orange">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <h3 className="mt-4 text-xl font-bold leading-snug text-graphite-900">
+                    {page.navLabel}
+                  </h3>
+                  <p className="mt-3 text-sm leading-relaxed text-graphite-900/65">
+                    {page.description}
+                  </p>
+                  <span className="mt-5 inline-flex text-sm font-semibold text-orange transition-colors group-hover:text-orange-bright">
+                    Открыть направление
+                  </span>
+                </Link>
+              </Reveal>
+            ))}
+          </div>
+        </Container>
+      </section>
 
       {/* Услуги детально */}
       <section className="bg-light py-24 md:py-32">
