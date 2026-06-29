@@ -3,8 +3,35 @@ import Link from "next/link";
 import Container from "@/components/ui/Container";
 
 export const metadata: Metadata = {
-  title: "Спасибо — АЗИМЕР",
-  description: "Заявка принята. Мы свяжемся с вами в течение рабочего дня.",
+  title: "Заявка принята — АЗИМЕР",
+  description:
+    "Ваша заявка принята. Менеджер АЗИМЕР свяжется с вами в течение рабочего дня.",
+  alternates: { canonical: "https://azimer.ru/thanks" },
+  openGraph: {
+    type: "website",
+    locale: "ru_RU",
+    url: "https://azimer.ru/thanks",
+    siteName: "АЗИМЕР",
+    title: "Заявка принята — АЗИМЕР",
+    description:
+      "Ваша заявка принята. Менеджер АЗИМЕР свяжется с вами в течение рабочего дня.",
+    images: [
+      {
+        url: "/og-image.png?v=2",
+        width: 1200,
+        height: 630,
+        alt: "АЗИМЕР — каркасные здания под ключ",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Заявка принята — АЗИМЕР",
+    description:
+      "Ваша заявка принята. Менеджер АЗИМЕР свяжется с вами в течение рабочего дня.",
+    images: ["/og-image.png?v=2"],
+  },
+  robots: { index: false },
 };
 
 export default function SpasiboPage() {

@@ -5,7 +5,9 @@ import Container from "@/components/ui/Container";
 import Label from "@/components/ui/Label";
 import Reveal from "@/components/ui/Reveal";
 import CtaFinal from "@/components/sections/CtaFinal";
+import JsonLd from "@/components/seo/JsonLd";
 import { projects } from "@/lib/content";
+import { breadcrumbJsonLd } from "@/lib/seo-jsonld";
 
 // Mapping imgPos → Tailwind class. Literal mapping чтобы Tailwind не выкосил из bundle.
 const POS_CLASS: Record<string, string> = {
@@ -17,14 +19,40 @@ const POS_CLASS: Record<string, string> = {
 };
 
 export const metadata: Metadata = {
-  title: "Объекты — АЗИМЕР",
+  title: "Реализованные объекты — АЗИМЕР Красноярск",
   description:
-    "Реализованные объекты ООО «АЗИМЕР»: склады, ангары, производственные корпуса, коммерческие и модульные здания. Красноярск.",
+    "Завершённые объекты ООО «АЗИМЕР»: склады, ангары, АБК, жилые дома. Каркасное строительство под ключ в Красноярске и регионе.",
+  alternates: { canonical: "https://azimer.ru/projects" },
+  openGraph: {
+    type: "website",
+    locale: "ru_RU",
+    url: "https://azimer.ru/projects",
+    siteName: "АЗИМЕР",
+    title: "Реализованные объекты — АЗИМЕР Красноярск",
+    description:
+      "Завершённые объекты ООО «АЗИМЕР»: склады, ангары, АБК, жилые дома. Каркасное строительство под ключ в Красноярске и регионе.",
+    images: [
+      {
+        url: "/og-image.png?v=2",
+        width: 1200,
+        height: 630,
+        alt: "АЗИМЕР — каркасные здания под ключ",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Реализованные объекты — АЗИМЕР Красноярск",
+    description:
+      "Завершённые объекты ООО «АЗИМЕР»: склады, ангары, АБК, жилые дома. Каркасное строительство под ключ в Красноярске и регионе.",
+    images: ["/og-image.png?v=2"],
+  },
 };
 
 export default function ObektyPage() {
   return (
     <>
+      <JsonLd data={breadcrumbJsonLd("Объекты", "https://azimer.ru/projects")} />
       <PageHero
         crumb="Объекты"
         title="Реализованные объекты"

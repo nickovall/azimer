@@ -5,17 +5,47 @@ import Label from "@/components/ui/Label";
 import Reveal from "@/components/ui/Reveal";
 import Button from "@/components/ui/Button";
 import CtaFinal from "@/components/sections/CtaFinal";
+import JsonLd from "@/components/seo/JsonLd";
 import { servicesDetailed, objectTypesFull, b2bAdvantages } from "@/lib/content";
+import { breadcrumbJsonLd, faqPageJsonLd, serviceJsonLd } from "@/lib/seo-jsonld";
 
 export const metadata: Metadata = {
-  title: "Услуги — АЗИМЕР",
+  title: "Услуги — Каркасное строительство · АЗИМЕР",
   description:
-    "Проектирование, изготовление и монтаж металлокаркасов, ЛСТК, модульных зданий, сэндвич-панелей и кровли. Работаем с юрлицами и ИП: НДС, счета-фактуры, закрывающие документы. ООО «АЗИМЕР», Красноярск.",
+    "Проектирование, изготовление и монтаж металлокаркасов, ЛСТК, модульных зданий, сэндвич-панелей. Работаем с юрлицами и ИП. АЗИМЕР, Красноярск.",
+  alternates: { canonical: "https://azimer.ru/services" },
+  openGraph: {
+    type: "website",
+    locale: "ru_RU",
+    url: "https://azimer.ru/services",
+    siteName: "АЗИМЕР",
+    title: "Услуги — Каркасное строительство · АЗИМЕР",
+    description:
+      "Проектирование, изготовление и монтаж металлокаркасов, ЛСТК, модульных зданий, сэндвич-панелей. Работаем с юрлицами и ИП. АЗИМЕР, Красноярск.",
+    images: [
+      {
+        url: "/og-image.png?v=2",
+        width: 1200,
+        height: 630,
+        alt: "АЗИМЕР — каркасные здания под ключ",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Услуги — Каркасное строительство · АЗИМЕР",
+    description:
+      "Проектирование, изготовление и монтаж металлокаркасов, ЛСТК, модульных зданий, сэндвич-панелей. Работаем с юрлицами и ИП. АЗИМЕР, Красноярск.",
+    images: ["/og-image.png?v=2"],
+  },
 };
 
 export default function UslugiPage() {
   return (
     <>
+      <JsonLd data={serviceJsonLd} />
+      <JsonLd data={faqPageJsonLd} />
+      <JsonLd data={breadcrumbJsonLd("Услуги", "https://azimer.ru/services")} />
       <PageHero
         crumb="Услуги"
         title="Полный цикл по каркасным конструкциям"

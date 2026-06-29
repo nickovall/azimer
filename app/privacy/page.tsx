@@ -7,7 +7,32 @@ import { company } from "@/lib/content";
 export const metadata: Metadata = {
   title: "Политика конфиденциальности — АЗИМЕР",
   description:
-    "Политика обработки персональных данных ООО «АЗИМЕР» в соответствии с Федеральным законом № 152-ФЗ «О персональных данных».",
+    "Политика обработки персональных данных ООО «АЗИМЕР» в соответствии с ФЗ № 152. Сайт azimer.ru.",
+  alternates: { canonical: "https://azimer.ru/privacy" },
+  openGraph: {
+    type: "website",
+    locale: "ru_RU",
+    url: "https://azimer.ru/privacy",
+    siteName: "АЗИМЕР",
+    title: "Политика конфиденциальности — АЗИМЕР",
+    description:
+      "Политика обработки персональных данных ООО «АЗИМЕР» в соответствии с ФЗ № 152. Сайт azimer.ru.",
+    images: [
+      {
+        url: "/og-image.png?v=2",
+        width: 1200,
+        height: 630,
+        alt: "АЗИМЕР — каркасные здания под ключ",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Политика конфиденциальности — АЗИМЕР",
+    description:
+      "Политика обработки персональных данных ООО «АЗИМЕР» в соответствии с ФЗ № 152. Сайт azimer.ru.",
+    images: ["/og-image.png?v=2"],
+  },
 };
 
 const EFFECTIVE_DATE = "26 июня 2026 г.";

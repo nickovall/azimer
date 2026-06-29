@@ -4,11 +4,38 @@ import Container from "@/components/ui/Container";
 import Label from "@/components/ui/Label";
 import Reveal from "@/components/ui/Reveal";
 import ProjectForm from "@/components/ProjectForm";
+import JsonLd from "@/components/seo/JsonLd";
+import { breadcrumbJsonLd } from "@/lib/seo-jsonld";
 
 export const metadata: Metadata = {
   title: "Расчёт по готовому проекту — АЗИМЕР",
   description:
-    "Есть проект или чертежи? Загрузите документацию — подготовим коммерческое предложение по вашему проекту каркасного здания.",
+    "Есть проект или чертежи? Загрузите документацию — подготовим коммерческое предложение по вашему проекту каркасного здания. АЗИМЕР, Красноярск.",
+  alternates: { canonical: "https://azimer.ru/estimate-project" },
+  openGraph: {
+    type: "website",
+    locale: "ru_RU",
+    url: "https://azimer.ru/estimate-project",
+    siteName: "АЗИМЕР",
+    title: "Расчёт по готовому проекту — АЗИМЕР",
+    description:
+      "Есть проект или чертежи? Загрузите документацию — подготовим коммерческое предложение по вашему проекту каркасного здания. АЗИМЕР, Красноярск.",
+    images: [
+      {
+        url: "/og-image.png?v=2",
+        width: 1200,
+        height: 630,
+        alt: "АЗИМЕР — каркасные здания под ключ",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Расчёт по готовому проекту — АЗИМЕР",
+    description:
+      "Есть проект или чертежи? Загрузите документацию — подготовим коммерческое предложение по вашему проекту каркасного здания. АЗИМЕР, Красноярск.",
+    images: ["/og-image.png?v=2"],
+  },
 };
 
 const steps = [
@@ -20,6 +47,7 @@ const steps = [
 export default function RaschetProektPage() {
   return (
     <>
+      <JsonLd data={breadcrumbJsonLd("Расчёт по проекту", "https://azimer.ru/estimate-project")} />
       <PageHero
         crumb="Расчёт по проекту"
         title="Расчёт по готовому проекту"

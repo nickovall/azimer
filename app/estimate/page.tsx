@@ -3,12 +3,39 @@ import Link from "next/link";
 import PageHero from "@/components/PageHero";
 import Container from "@/components/ui/Container";
 import RaschetWizard from "@/components/estimate/RaschetWizard";
+import JsonLd from "@/components/seo/JsonLd";
 import { company } from "@/lib/content";
+import { breadcrumbJsonLd } from "@/lib/seo-jsonld";
 
 export const metadata: Metadata = {
-  title: "Мастер расчёта — АЗИМЕР",
+  title: "Расчёт стоимости каркасного здания онлайн — АЗИМЕР",
   description:
-    "Рассчитайте предварительную стоимость каркасного здания онлайн. Укажите параметры объекта по шагам и получите оценку и заявку на КП.",
+    "Рассчитайте предварительную стоимость ангара, склада или здания онлайн. 3–5 минут, укажите параметры — получите оценку и заявку на КП. АЗИМЕР, Красноярск.",
+  alternates: { canonical: "https://azimer.ru/estimate" },
+  openGraph: {
+    type: "website",
+    locale: "ru_RU",
+    url: "https://azimer.ru/estimate",
+    siteName: "АЗИМЕР",
+    title: "Расчёт стоимости каркасного здания онлайн — АЗИМЕР",
+    description:
+      "Рассчитайте предварительную стоимость ангара, склада или здания онлайн. 3–5 минут, укажите параметры — получите оценку и заявку на КП. АЗИМЕР, Красноярск.",
+    images: [
+      {
+        url: "/og-image.png?v=2",
+        width: 1200,
+        height: 630,
+        alt: "АЗИМЕР — каркасные здания под ключ",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Расчёт стоимости каркасного здания онлайн — АЗИМЕР",
+    description:
+      "Рассчитайте предварительную стоимость ангара, склада или здания онлайн. 3–5 минут, укажите параметры — получите оценку и заявку на КП. АЗИМЕР, Красноярск.",
+    images: ["/og-image.png?v=2"],
+  },
 };
 
 const promiseItems = [
@@ -20,6 +47,7 @@ const promiseItems = [
 export default function RaschetPage() {
   return (
     <>
+      <JsonLd data={breadcrumbJsonLd("Расчёт", "https://azimer.ru/estimate")} />
       <PageHero
         crumb="Мастер расчёта"
         title="Предварительный расчёт объекта"

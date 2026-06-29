@@ -9,17 +9,45 @@ import Process from "@/components/sections/Process";
 // Не возвращать без нового явного согласования.
 import Trust from "@/components/sections/Trust";
 import CtaFinal from "@/components/sections/CtaFinal";
+import JsonLd from "@/components/seo/JsonLd";
 import { principles } from "@/lib/content";
+import { breadcrumbJsonLd } from "@/lib/seo-jsonld";
 
 export const metadata: Metadata = {
-  title: "О компании — АЗИМЕР",
+  title: "О компании АЗИМЕР — Каркасные здания Красноярск",
   description:
-    "ООО «АЗИМЕР» — подрядчик по каркасным объектам в Красноярске: жилые дома, склады, ангары, производство, коммерция. Проектирование, изготовление и монтаж с документальным оформлением.",
+    "ООО «АЗИМЕР» — подрядчик по каркасным объектам в Красноярске. Жилые дома, склады, ангары, производство, коммерция. Проектирование и монтаж.",
+  alternates: { canonical: "https://azimer.ru/about" },
+  openGraph: {
+    type: "website",
+    locale: "ru_RU",
+    url: "https://azimer.ru/about",
+    siteName: "АЗИМЕР",
+    title: "О компании АЗИМЕР — Каркасные здания Красноярск",
+    description:
+      "ООО «АЗИМЕР» — подрядчик по каркасным объектам в Красноярске. Жилые дома, склады, ангары, производство, коммерция. Проектирование и монтаж.",
+    images: [
+      {
+        url: "/og-image.png?v=2",
+        width: 1200,
+        height: 630,
+        alt: "АЗИМЕР — каркасные здания под ключ",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "О компании АЗИМЕР — Каркасные здания Красноярск",
+    description:
+      "ООО «АЗИМЕР» — подрядчик по каркасным объектам в Красноярске. Жилые дома, склады, ангары, производство, коммерция. Проектирование и монтаж.",
+    images: ["/og-image.png?v=2"],
+  },
 };
 
 export default function AboutPage() {
   return (
     <>
+      <JsonLd data={breadcrumbJsonLd("О компании", "https://azimer.ru/about")} />
       <PageHero
         crumb="О компании"
         title="Каркасное строительство полного цикла"

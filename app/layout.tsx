@@ -8,6 +8,8 @@ import MobileStickyCta from "@/components/MobileStickyCta";
 import Analytics from "@/components/Analytics";
 import CookieBanner from "@/components/CookieBanner";
 import HideOnAdminRoutes from "@/components/HideOnAdminRoutes";
+import JsonLd from "@/components/seo/JsonLd";
+import { organizationJsonLd, websiteJsonLd } from "@/lib/seo-jsonld";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -39,7 +41,6 @@ export const metadata: Metadata = {
     "жилой дом каркасный", "сэндвич-панели", "ЛСТК", "металлокаркас",
     "производственное здание", "коммерческое здание",
   ],
-  alternates: { canonical: SITE_URL },
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
@@ -114,6 +115,8 @@ export default function RootLayout({
   return (
     <html lang="ru" className={`${inter.variable} ${plexMono.variable}`}>
       <body className="min-h-screen">
+        <JsonLd data={organizationJsonLd} />
+        <JsonLd data={websiteJsonLd} />
         <Analytics />
         <SmoothScroll>
           <Header />

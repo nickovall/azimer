@@ -4,11 +4,38 @@ import Container from "@/components/ui/Container";
 import Label from "@/components/ui/Label";
 import Reveal from "@/components/ui/Reveal";
 import PartnerForm from "@/components/PartnerForm";
+import JsonLd from "@/components/seo/JsonLd";
+import { breadcrumbJsonLd } from "@/lib/seo-jsonld";
 
 export const metadata: Metadata = {
-  title: "Партнёрство — АЗИМЕР",
+  title: "Партнёрство с АЗИМЕР — Красноярск",
   description:
-    "Сотрудничество с ООО «АЗИМЕР»: монтажные бригады, поставщики материалов, проектировщики, спецтехника.",
+    "Сотрудничество с ООО «АЗИМЕР»: монтажные бригады, поставщики металлопроката, проектировщики, спецтехника. Красноярск и регион.",
+  alternates: { canonical: "https://azimer.ru/partners" },
+  openGraph: {
+    type: "website",
+    locale: "ru_RU",
+    url: "https://azimer.ru/partners",
+    siteName: "АЗИМЕР",
+    title: "Партнёрство с АЗИМЕР — Красноярск",
+    description:
+      "Сотрудничество с ООО «АЗИМЕР»: монтажные бригады, поставщики металлопроката, проектировщики, спецтехника. Красноярск и регион.",
+    images: [
+      {
+        url: "/og-image.png?v=2",
+        width: 1200,
+        height: 630,
+        alt: "АЗИМЕР — каркасные здания под ключ",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Партнёрство с АЗИМЕР — Красноярск",
+    description:
+      "Сотрудничество с ООО «АЗИМЕР»: монтажные бригады, поставщики металлопроката, проектировщики, спецтехника. Красноярск и регион.",
+    images: ["/og-image.png?v=2"],
+  },
 };
 
 const partners = [
@@ -21,6 +48,7 @@ const partners = [
 export default function PartnyorstvoPage() {
   return (
     <>
+      <JsonLd data={breadcrumbJsonLd("Партнёрство", "https://azimer.ru/partners")} />
       <PageHero
         crumb="Партнёрство"
         title="Сотрудничество с АЗИМЕР"

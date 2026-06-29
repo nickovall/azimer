@@ -4,12 +4,39 @@ import Container from "@/components/ui/Container";
 import Label from "@/components/ui/Label";
 import Reveal from "@/components/ui/Reveal";
 import ContactForm from "@/components/ContactForm";
+import JsonLd from "@/components/seo/JsonLd";
 import { company } from "@/lib/content";
+import { breadcrumbJsonLd } from "@/lib/seo-jsonld";
 
 export const metadata: Metadata = {
-  title: "Контакты — АЗИМЕР",
+  title: "Контакты — АЗИМЕР Красноярск",
   description:
-    "Связаться с ООО «АЗИМЕР» — каркасное строительство в Красноярске. Телефон, VK-чат и заявка на расчёт объекта.",
+    "Связаться с ООО «АЗИМЕР» — каркасное строительство Красноярск. Телефон: +7 901 600-05-65. Заявка на расчёт объекта в течение рабочего дня.",
+  alternates: { canonical: "https://azimer.ru/contacts" },
+  openGraph: {
+    type: "website",
+    locale: "ru_RU",
+    url: "https://azimer.ru/contacts",
+    siteName: "АЗИМЕР",
+    title: "Контакты — АЗИМЕР Красноярск",
+    description:
+      "Связаться с ООО «АЗИМЕР» — каркасное строительство Красноярск. Телефон: +7 901 600-05-65. Заявка на расчёт объекта в течение рабочего дня.",
+    images: [
+      {
+        url: "/og-image.png?v=2",
+        width: 1200,
+        height: 630,
+        alt: "АЗИМЕР — каркасные здания под ключ",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Контакты — АЗИМЕР Красноярск",
+    description:
+      "Связаться с ООО «АЗИМЕР» — каркасное строительство Красноярск. Телефон: +7 901 600-05-65. Заявка на расчёт объекта в течение рабочего дня.",
+    images: ["/og-image.png?v=2"],
+  },
 };
 
 const info = [
@@ -21,6 +48,7 @@ const info = [
 export default function ContactsPage() {
   return (
     <>
+      <JsonLd data={breadcrumbJsonLd("Контакты", "https://azimer.ru/contacts")} />
       <PageHero
         crumb="Контакты"
         title="Связаться с АЗИМЕР"

@@ -4,11 +4,11 @@ export const dynamic = "force-static";
 
 export default function robots(): MetadataRoute.Robots {
   return {
-    rules: [
-      { userAgent: "*", allow: "/" },
-      // Защищаем технические страницы и формы
-      { userAgent: "*", disallow: ["/thanks", "/api/"] },
-    ],
+    rules: {
+      userAgent: "*",
+      allow: "/",
+      disallow: ["/thanks", "/kp", "/api/", "/console-x9p4m2/"],
+    },
     sitemap: "https://azimer.ru/sitemap.xml",
     host:    "https://azimer.ru",
   };
