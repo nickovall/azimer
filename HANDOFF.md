@@ -33,6 +33,91 @@ It intentionally contains no secret values.
   testimonials, or `Testimonials` sections on the public site unless the owner
   explicitly reverses this decision later.
 
+## Work Handoff As Of 2026-06-29 (SEO Technical Track A)
+
+### TL;DR
+
+Per-page canonical, unique meta/OG/Twitter, JSON-LD, and robots rules shipped.
+No new landing pages were created. Admin routes were not changed in this work.
+Prod pipeline `#2635956838` succeeded for commit `d67a9a3`.
+
+### Architecture
+
+```text
+app/layout.tsx
+  +-- global metadataBase / default metadata
+  +-- Organization + WebSite JSON-LD
+  |
+  +-- app/*/page.tsx
+        +-- per-page canonical + title/description
+        +-- per-page openGraph/twitter
+        +-- page JSON-LD where applicable
+
+components/seo/JsonLd.tsx
+  +-- safe JSON.stringify(...).replace(/</g, "\\u003c")
+
+lib/seo-jsonld.ts
+  +-- Organization / WebSite / FAQPage / Service / BreadcrumbList data
+```
+
+### Current State
+
+- ✅ `npm run build` clean with Next.js 16.2.6; 25 static routes generated.
+- ✅ `/services/` production canonical and `og:url` point to
+  `https://azimer.ru/services/` instead of the site root.
+- ✅ Root page and `/services/` include JSON-LD; `/kp` and `/thanks` are
+  `noindex`.
+- ✅ `robots.txt` disallows `/thanks`, `/kp`, `/api/`, and `/console-x9p4m2/`.
+- ✅ `sitemap.xml` includes public routes only and excludes `/kp`/`/thanks`.
+
+### Key Decisions
+
+- Used per-page Metadata API exports because Next metadata is shallow-merged:
+  nested `openGraph`/`twitter` fields must be complete on every page that
+  overrides them.
+- Kept `trailingSlash: true` canonical output (`/services/`) because this is
+  the actual static-export URL shape served by GitLab Pages.
+- Split `/kp` into a server `page.tsx` wrapper plus client `KpClient.tsx`
+  because Metadata API cannot be exported from a `"use client"` page.
+- Used `company` fields from `lib/content.ts` for schema phone/email/VK so
+  structured data follows the current public contact source.
+
+### Open Questions
+
+- Rich Results Test should still be run manually in Google UI:
+  `https://search.google.com/test/rich-results?url=https://azimer.ru/`.
+- Search Console / Yandex reindexing timing remains external: expect 1-4 weeks.
+
+### Next Concrete Steps
+
+1. Submit `/`, `/services/`, and `/projects/` for reindexing in Yandex/Google.
+2. Run Google Rich Results Test for `/` and `/services/`.
+3. Track impressions/index coverage after the canonical fix lands in crawlers.
+
+### File Index
+
+- `app/layout.tsx`
+- `app/page.tsx`
+- `app/*/page.tsx` public route metadata
+- `app/kp/KpClient.tsx`
+- `app/robots.ts`
+- `components/seo/JsonLd.tsx`
+- `lib/seo-jsonld.ts`
+
+### Credentials & Access
+
+- Build reads public Supabase env names from `.env.local`:
+  `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+- GitLab deploy used `B:\dbtest\.tokens\gitlab.txt`; value was not printed or
+  committed.
+
+### Glossary
+
+- Canonical: search-engine URL signal for the preferred version of a page.
+- JSON-LD: schema.org structured data rendered as
+  `application/ld+json` scripts.
+- Track A: technical SEO fixes without adding new SEO landing pages.
+
 ## Work Handoff As Of 2026-06-28 (Lead contacts edit + follow-up reminders)
 
 ### TL;DR
